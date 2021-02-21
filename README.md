@@ -4,6 +4,7 @@
 
 ```commandline
 conda create -n transformer python=3.8
+conda activate transformer
 conda install -c pytorch pytorch torchvision cudatoolkit=11.0
 pip install -U homura-core chika datasets tokenizers
 ```
@@ -23,5 +24,5 @@ python main.py [--model.block {ipre_ln, pre_ln, post_ln}] [--amp]
 - [ ] self attention
 
 ## Acknowledgement
- 
+
 For this project, I learned a lot from Andrej's [minGPT](https://github.com/karpathy/mingpt).
