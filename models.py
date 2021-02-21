@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
+from homura import Registry
 from torch import nn
 from torch.nn import functional as F
 
@@ -19,7 +20,11 @@ except ImportError:
 
     einsum = torch.einsum
 
+ATTENTIONS = Registry("attentions", )
+BLOCK = Registry("block", nn.Module)
 
+
+@ATTENTIONS.register(name="dotprod")
 def dotproduct_self_attention(query: torch.Tensor,
                               key: torch.Tensor,
                               value: torch.Tensor,
@@ -50,11 +55,11 @@ def dotproduct_self_attention(query: torch.Tensor,
 
 class CausalSelfAttention(nn.Module):
     def __init__(self,
+                 max_len: int,
                  emb_dim: int,
-                 max_size: int,
-                 num_heads: int = 12,
-                 attn_dropout_rate: float = 0.1,
-                 proj_dropout_rate: float = 0.1):
+                 num_heads: int,
+                 attn_dropout_rate: float,
+                 proj_dropout_rate: float):
         super().__init__()
 
         self.emb_dim = emb_dim
@@ -65,19 +70,20 @@ class CausalSelfAttention(nn.Module):
         self.proj = nn.Linear(emb_dim, emb_dim)
         self.attn_dropout = nn.Dropout(attn_dropout_rate)
         self.proj_dropout = nn.Dropout(proj_dropout_rate)
-        self.register_buffer("mask", torch.tril(torch.ones(max_size, max_size))[None, None])
+        self.register_buffer("mask", torch.tril(torch.ones(max_len, max_len))[None, None])
 
     def forward(self,
                 input: torch.Tensor
                 ) -> torch.Tensor:
         # input: BxNxC
         b = input.size(0)
+        # BxNxC -> BxCxN -> BxHxC'xN
         key = self.key(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
         query = self.query(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
         value = self.value(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
 
         attention = dotproduct_self_attention(query, key, value, self.mask, self.attn_dropout)
-        attention = attention.view(b, attention.size(-1), -1).transpose(-1, -2)
+        attention = attention.reshape(b, self.emb_dim, -1).transpose(-1, -2)
         return self.proj_dropout(self.proj(attention))
 
 
@@ -101,6 +107,7 @@ class BlockBase(nn.Module):
         raise NotImplementedError
 
 
+@BLOCK.register(name="post_ln")
 class PostLNBlock(BlockBase):
     """ Transformer Block from "Attention is All You Need"
     """
@@ -115,6 +122,7 @@ class PostLNBlock(BlockBase):
         return self.ln2(x)
 
 
+@BLOCK.register(name="pre_ln")
 class PreLNBlock(BlockBase):
     """ BERT's Transformer Block
     """
@@ -129,6 +137,7 @@ class PreLNBlock(BlockBase):
         return x + self.mlp(x)
 
 
+@BLOCK.register(name="ipre_ln")
 class ImprovedPreLNBlock(BlockBase):
     """ Megatron-LM's Transformer Block
     """
@@ -145,14 +154,15 @@ class GPT(nn.Module):
     def __init__(self,
                  block: BlockBase,
                  vocab_size: int,
-                 max_size: int,
-                 emb_dim: int = 768,
-                 num_layers: int = 12,
-                 emb_dropout_rate: float = 0.1
+                 max_len: int,
+                 emb_dim: int,
+                 num_layers: int,
+                 emb_dropout_rate: float
                  ):
         super().__init__()
+        self.max_len = max_len
         self.tok_emb = nn.Embedding(vocab_size, emb_dim)
-        self.pos_emb = nn.Parameter(torch.zeros(1, max_size, emb_dim))
+        self.pos_emb = nn.Parameter(torch.zeros(1, max_len, emb_dim))
         self.dropout = nn.Dropout(emb_dropout_rate)
         self.blocks = nn.Sequential(*[deepcopy(block) for _ in range(num_layers)])
         self.head = nn.Sequential(nn.LayerNorm(emb_dim), nn.Linear(emb_dim, vocab_size, bias=False))
@@ -180,7 +190,7 @@ class GPT(nn.Module):
         logits = self.head(x)
         loss = None
         if targets is not None:
-            loss = F.cross_entropy(logits.flatten(0, -2), targets.view(-1))
+            loss = F.cross_entropy(logits.flatten(0, -2), targets.reshape(-1))
         return logits, loss
 
     @property
@@ -204,3 +214,21 @@ class GPT(nn.Module):
                     no_decay.add(module.bias)
         assert len([param for param in self.parameters()]) == len(decay) + len(no_decay)
         return {"decay": list(decay), "no_decay": list(no_decay)}
+
+    @classmethod
+    def construct(cls,
+                  block: str,
+                  vocab_size: int,
+                  max_len: int,
+                  num_heads: int = 12,
+                  emb_dim: int = 768,
+                  num_layers: int = 12,
+                  emb_dropout_rate: float = 0.1,
+                  attn_dropout_rate: float = 0.1,
+                  proj_dropout_rate: float = 0.1,
+                  **kwargs
+                  ):
+        block = BLOCK(block)(emb_dim,
+                             CausalSelfAttention(max_len, emb_dim, num_heads, attn_dropout_rate, proj_dropout_rate),
+                             proj_dropout_rate)
+        return cls(block, vocab_size, max_len, emb_dim, num_layers, emb_dropout_rate)
