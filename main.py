@@ -11,7 +11,7 @@ class DataConfig:
     batch_size: int = 256
     max_len: int = 128
     train_full: bool = chika.with_help(False, help="True if train model on full wikitext train set. "
-                                                   "Otherwise, 10% of train set is used.")
+                                                   "Otherwise, 20% of train set is used.")
 
 
 @chika.config
@@ -57,7 +57,7 @@ def main(cfg: Config):
     # optimizer is setup automatically
     scheduler = homura.lr_scheduler.CosineAnnealingWithWarmup(cfg.optim.epochs * len(train_loader), 1,
                                                               cfg.optim.warmup_iters)
-    sample_text = "In the beginning was the Word"
+    sample_text = "in the beginning was the word"
     sample_tensor = torch.tensor(tokenizer.encode(sample_text).ids).view(1, -1)
     with GPTTrainer(model, None, None,
                     reporters=[homura.reporters.TensorboardReporter(".")],
@@ -69,9 +69,9 @@ def main(cfg: Config):
         for ep in trainer.epoch_range(cfg.optim.epochs):
             trainer.train(train_loader)
             trainer.test(val_loader, "val")
-            sampled = trainer.sample(sample_tensor.to(trainer.device), num_steps=64, sampling=True)
+            sampled = trainer.sample(sample_tensor.to(trainer.device), num_steps=64, sampling=True, only_tok_k=10)
             sampled_text = tokenizer.decode(sampled.view(-1).cpu().tolist())
-            print(f"{ep:>4}: {sampled_text}")
+            print(f"[{ep:>4}] loss={trainer.history['loss/val'][-1]:.3f}|| {sampled_text}")
 
 
 if __name__ == "__main__":

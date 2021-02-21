@@ -6,7 +6,6 @@ from typing import Callable, Dict, List, Optional, Tuple
 import torch
 from homura import Registry
 from torch import nn
-from torch.nn import functional as F
 
 try:
     import opt_einsum
@@ -179,19 +178,15 @@ class GPT(nn.Module):
                 nn.init.ones_(module.weight)
 
     def forward(self,
-                idx: torch.Tensor,
-                targets: Optional[torch.Tensor] = None
+                input: torch.Tensor,
                 ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        b, t = idx.size()
-        token_emb = self.tok_emb(idx)
+        b, t = input.size()
+        token_emb = self.tok_emb(input)
         pos_emb = self.pos_emb[:, :t, :]
-        x = self.dropout(token_emb + pos_emb)
+        x = self.dropout(token_emb + pos_emb)  # BxTxC
         x = self.blocks(x)
         logits = self.head(x)
-        loss = None
-        if targets is not None:
-            loss = F.cross_entropy(logits.flatten(0, -2), targets.reshape(-1))
-        return logits, loss
+        return logits
 
     @property
     def param_groups(self
