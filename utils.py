@@ -6,7 +6,7 @@ import datasets
 import torch
 from homura import TensorTuple
 from homura.trainers import SupervisedTrainer
-from tokenizers import Tokenizer, models, normalizers, pre_tokenizers
+from tokenizers import Tokenizer, models, normalizers, pre_tokenizers, trainers
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
@@ -33,7 +33,8 @@ def get_data(batch_size,
             for i in range(0, len(dataset), bs):
                 yield dataset[i: i + bs]["text"]
 
-        tokenizer.train_from_iterator(batch_iterator(1_000), length=len(dataset))
+        trainer = trainers.BpeTrainer(min_frequency=2, special_tokens=["<s>", "<pad>", "</s>", "<unk>", "<mask>"])
+        tokenizer.train_from_iterator(batch_iterator(1_000), trainer=trainer, length=len(dataset))
         tokenizer.save(str(tokenizer_path))
 
     train_ds, val_ds = datasets.load_dataset("wikitext", "wikitext-103-raw-v1", split=['train' if train_full

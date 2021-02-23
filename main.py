@@ -10,8 +10,7 @@ from utils import GPTTrainer, get_data
 class DataConfig:
     batch_size: int = 256
     max_len: int = 128
-    train_full: bool = chika.with_help(False, help="True if train model on full wikitext train set. "
-                                                   "Otherwise, 20% of train set is used.")
+    train_full: bool = False
 
 
 @chika.config
@@ -57,8 +56,8 @@ def main(cfg: Config):
     # optimizer is setup automatically
     scheduler = homura.lr_scheduler.CosineAnnealingWithWarmup(cfg.optim.epochs * len(train_loader), 1,
                                                               cfg.optim.warmup_iters)
-    sample_text = "in the beginning was the word"
-    sample_tensor = torch.tensor(tokenizer.encode(sample_text).ids).view(1, -1)
+    sample_text = tokenizer.encode("in the beginning was the word")
+    sample_tensor = torch.tensor(sample_text.ids[:sum(sample_text.attention_mask)]).view(1, -1)
     with GPTTrainer(model, None, None,
                     reporters=[homura.reporters.TensorboardReporter(".")],
                     scheduler=scheduler,

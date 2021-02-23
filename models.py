@@ -80,8 +80,8 @@ class CausalSelfAttention(nn.Module):
         key = self.key(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
         query = self.query(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
         value = self.value(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
-
-        attention = dotproduct_self_attention(query, key, value, self.mask, self.attn_dropout)
+        attention = dotproduct_self_attention(query, key, value, self.mask,
+                                              self.attn_dropout if self.training else None)
         attention = attention.reshape(b, self.emb_dim, -1).transpose(-1, -2)
         return self.proj_dropout(self.proj(attention))
 
@@ -183,9 +183,9 @@ class GPT(nn.Module):
         b, t = input.size()
         token_emb = self.tok_emb(input)
         pos_emb = self.pos_emb[:, :t, :]
-        x = self.dropout(token_emb + pos_emb)  # BxTxC
-        x = self.blocks(x)
-        logits = self.head(x)
+        x = self.dropout(token_emb + pos_emb)  # BxNxC
+        x = self.blocks(x)  # BxNxC
+        logits = self.head(x)  # BxNxV
         return logits
 
     @property
