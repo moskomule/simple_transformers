@@ -69,7 +69,7 @@ def main(cfg: Config):
             trainer.train(train_loader)
             trainer.test(val_loader, "val")
             sampled = trainer.sample(sample_tensor.to(trainer.device), num_steps=64, sampling=True, only_tok_k=10)
-            sampled_text = tokenizer.decode(sampled.view(-1).cpu().tolist())
+            sampled_text = tokenizer.decode(sampled.view(-1).cpu().tolist(), False)
             print(f"[{ep:>4}] loss={trainer.history['loss/val'][-1]:.3f}|| {sampled_text}")
 
 

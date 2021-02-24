@@ -45,7 +45,7 @@ def dotproduct_self_attention(query: torch.Tensor,
     context = einsum("bhkn,bhkm->bhmn", query, key).div(math.sqrt(query.size(1)))
     if mask is not None:
         size = context.size(-1)
-        context = context.masked_fill(mask[:, :, :size, :size] == 0, float('-inf'))
+        context = context.masked_fill(mask[:, :, :size, :size], float('-inf'))
     context = context.softmax(dim=-1)
     if dropout is not None:
         context = dropout(context)
@@ -69,7 +69,7 @@ class CausalSelfAttention(nn.Module):
         self.proj = nn.Linear(emb_dim, emb_dim)
         self.attn_dropout = nn.Dropout(attn_dropout_rate)
         self.proj_dropout = nn.Dropout(proj_dropout_rate)
-        self.register_buffer("mask", torch.tril(torch.ones(max_len, max_len))[None, None])
+        self.register_buffer("mask", torch.triu(torch.ones(max_len, max_len, dtype=torch.bool), 1)[None, None])
 
     def forward(self,
                 input: torch.Tensor
@@ -80,8 +80,7 @@ class CausalSelfAttention(nn.Module):
         key = self.key(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
         query = self.query(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
         value = self.value(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
-        attention = dotproduct_self_attention(query, key, value, self.mask,
-                                              self.attn_dropout if self.training else None)
+        attention = dotproduct_self_attention(query, key, value, self.mask, self.attn_dropout)
         attention = attention.reshape(b, self.emb_dim, -1).transpose(-1, -2)
         return self.proj_dropout(self.proj(attention))
 
