@@ -17,6 +17,7 @@ def get_data(batch_size,
              train_full=False
              ):
     max_len += 1
+    datasets.disable_progress_bar()
     environ['TOKENIZERS_PARALLELISM'] = 'true'
     tokenizer_path = pathlib.Path(f"wikitext_tokenizer{max_len}.json")
     if tokenizer_path.exists():
@@ -44,8 +45,8 @@ def get_data(batch_size,
         tokenized = tokenizer.encode(sent['text'])
         return {"ids": tokenized.ids, "mask": tokenized.attention_mask}
 
-    train_ds = train_ds.map(to_ids)
-    val_ds = val_ds.map(to_ids)
+    train_ds = train_ds.filter(lambda e: len(e['text']) > max_len).map(to_ids, num_proc=10)
+    val_ds = val_ds.filter(lambda e: len(e['text']) > max_len).map(to_ids, num_proc=10)
     train_ds.set_format(type='torch', columns=['ids', 'mask'])
     val_ds.set_format(type='torch', columns=['ids', 'mask'])
 
