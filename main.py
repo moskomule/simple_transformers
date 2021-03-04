@@ -8,6 +8,7 @@ from utils import GPTTrainer, get_data
 
 @chika.config
 class DataConfig:
+    name: str = chika.choices("wikitext", "gigaword")
     batch_size: int = 256
     max_len: int = 128
     train_full: bool = False
@@ -16,6 +17,7 @@ class DataConfig:
 @chika.config
 class OptimConfig:
     epochs: int = 20
+    name: str = chika.choices("adam", "adamw")
     lr: float = 3e-4
     weight_decay: float = 0.1
     betas: tuple = chika.sequence(0.9, 0.95)
@@ -35,6 +37,8 @@ class ModelConfig:
     attn_dropout_rate: float = 0.1
     proj_dropout_rate: float = 0.1
 
+    checkpoint_segments: int = 0
+
 
 @chika.config
 class Config:
@@ -48,15 +52,16 @@ class Config:
 
 @chika.main(cfg_cls=Config, strict=True)
 def main(cfg: Config):
+    print(cfg)
     torch.cuda.set_device(cfg.gpu)
     homura.set_seed(cfg.seed)
-    train_loader, val_loader, tokenizer, vocab_size = get_data(cfg.data.batch_size, cfg.data.max_len,
-                                                               train_full=cfg.data.train_full)
+    train_loader, val_loader, tokenizer, vocab_size = get_data(**cfg.data.to_dict())
     model = GPT.construct(**cfg.model.to_dict(), vocab_size=vocab_size, max_len=cfg.data.max_len)
     # optimizer is setup automatically
     scheduler = homura.lr_scheduler.CosineAnnealingWithWarmup(cfg.optim.epochs * len(train_loader), 1,
                                                               cfg.optim.warmup_iters)
-    sample_text = tokenizer.encode("in the beginning was the word")
+    sample_text = tokenizer.encode("however, as can be seen from")
+    # sample_text = tokenizer.encode("in the beginning was the word")
     sample_tensor = torch.tensor(sample_text.ids[:sum(sample_text.attention_mask)]).view(1, -1)
     with GPTTrainer(model, None, None,
                     reporters=[homura.reporters.TensorboardReporter(".")],
@@ -70,7 +75,8 @@ def main(cfg: Config):
             trainer.test(val_loader, "val")
             sampled = trainer.sample(sample_tensor.to(trainer.device), num_steps=64, sampling=True, only_tok_k=10)
             sampled_text = tokenizer.decode(sampled.view(-1).cpu().tolist(), False)
-            print(f"[{ep:>4}] loss={trainer.history['loss/val'][-1]:.3f}|| {sampled_text}")
+            print(f"[{ep:>4}] train loss = {trainer.history['loss/train'][-1]:.3e}"
+                  f" val loss={trainer.history['loss/val'][-1]:.3e}|| {sampled_text}")
 
 
 if __name__ == "__main__":

@@ -1,11 +1,13 @@
 import functools
 import math
+import warnings
 from copy import deepcopy
 from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
 from homura import Registry
 from torch import nn
+from torch.utils.checkpoint import checkpoint_sequential
 
 try:
     import opt_einsum
@@ -21,6 +23,19 @@ except ImportError:
 
 ATTENTIONS = Registry("attentions", )
 BLOCK = Registry("block", nn.Module)
+
+
+@torch.jit.script
+def gelu(input: torch.Tensor
+         ) -> torch.Tensor:
+    return 0.5 * input * (1 + (math.sqrt(2.0 / math.pi) * (input + 0.044715 * input.pow(3))).tanh())
+
+
+class GELU(nn.Module):
+    def forward(self,
+                input: torch.Tensor
+                ) -> torch.Tensor:
+        return gelu(input)
 
 
 @ATTENTIONS.register(name="dotprod")
@@ -45,7 +60,7 @@ def dotproduct_self_attention(query: torch.Tensor,
     context = einsum("bhkn,bhkm->bhmn", query, key).div(math.sqrt(query.size(1)))
     if mask is not None:
         size = context.size(-1)
-        context = context.masked_fill(mask[:, :, :size, :size], float('-inf'))
+        context = context.masked_fill(mask[:, :, :size, :size] == 0, float('-inf'))
     context = context.softmax(dim=-1)
     if dropout is not None:
         context = dropout(context)
@@ -69,18 +84,20 @@ class CausalSelfAttention(nn.Module):
         self.proj = nn.Linear(emb_dim, emb_dim)
         self.attn_dropout = nn.Dropout(attn_dropout_rate)
         self.proj_dropout = nn.Dropout(proj_dropout_rate)
-        self.register_buffer("mask", torch.triu(torch.ones(max_len, max_len, dtype=torch.bool), 1)[None, None])
+        self.register_buffer("mask", torch.tril(torch.ones(max_len, max_len, dtype=torch.bool))[None, None])
 
     def forward(self,
-                input: torch.Tensor
+                input: torch.Tensor,
+                mask: Optional[torch.Tensor] = None
                 ) -> torch.Tensor:
         # input: BxNxC
         b = input.size(0)
+        mask = self.mask if mask is None else self.mask & mask.bool()
         # BxNxC -> BxCxN -> BxHxC'xN
         key = self.key(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
         query = self.query(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
         value = self.value(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
-        attention = dotproduct_self_attention(query, key, value, self.mask, self.attn_dropout)
+        attention = dotproduct_self_attention(query, key, value, mask, self.attn_dropout)
         attention = attention.reshape(b, self.emb_dim, -1).transpose(-1, -2)
         return self.proj_dropout(self.proj(attention))
 
@@ -100,7 +117,8 @@ class BlockBase(nn.Module):
                                  nn.Dropout(dropout_rate))
 
     def forward(self,
-                input: torch.Tensor
+                input: torch.Tensor,
+                mask: Optional[torch.Tensor] = None
                 ) -> torch.Tensor:
         raise NotImplementedError
 
@@ -111,10 +129,11 @@ class PostLNBlock(BlockBase):
     """
 
     def forward(self,
-                input: torch.Tensor
+                input: torch.Tensor,
+                mask: Optional[torch.Tensor] = None
                 ) -> torch.Tensor:
         x = input
-        x = x + self.attention(x)
+        x = x + self.attention(x, mask)
         x = self.ln1(x)
         x = x + self.mlp(x)
         return self.ln2(x)
@@ -126,11 +145,12 @@ class PreLNBlock(BlockBase):
     """
 
     def forward(self,
-                input: torch.Tensor
+                input: torch.Tensor,
+                mask: Optional[torch.Tensor] = None
                 ) -> torch.Tensor:
         x = input
         x = self.ln1(x)
-        x = x + self.attention(x)
+        x = x + self.attention(x, mask)
         x = self.ln2(x)
         return x + self.mlp(x)
 
@@ -141,11 +161,22 @@ class ImprovedPreLNBlock(BlockBase):
     """
 
     def forward(self,
-                input: torch.Tensor
+                input: torch.Tensor,
+                mask: Optional[torch.Tensor] = None
                 ) -> torch.Tensor:
         x = input
-        x = x + self.attention(self.ln1(x))
+        x = x + self.attention(self.ln1(x), mask)
         return x + self.mlp(self.ln2(x))
+
+
+class MaskedSequential(nn.Sequential):
+    def forward(self,
+                input: torch.Tensor,
+                mask: torch.Tensor
+                ) -> torch.Tensor:
+        for module in self:
+            input = module(input, mask)
+        return input
 
 
 class GPT(nn.Module):
@@ -155,16 +186,29 @@ class GPT(nn.Module):
                  max_len: int,
                  emb_dim: int,
                  num_layers: int,
-                 emb_dropout_rate: float
+                 emb_dropout_rate: float,
+                 checkpoint_segments: int = 0
                  ):
         super().__init__()
         self.max_len = max_len
+        self.num_layers = num_layers
         self.tok_emb = nn.Embedding(vocab_size, emb_dim)
         self.pos_emb = nn.Parameter(torch.zeros(1, max_len, emb_dim))
         self.dropout = nn.Dropout(emb_dropout_rate)
-        self.blocks = nn.Sequential(*[deepcopy(block) for _ in range(num_layers)])
+        self._blocks = MaskedSequential(*[deepcopy(block) for _ in range(num_layers)])
+        if checkpoint_segments > 0:
+            self._blocks_train = functools.partial(checkpoint_sequential, self._blocks, checkpoint_segments)
+        else:
+            self._blocks_train = self._blocks
         self.head = nn.Sequential(nn.LayerNorm(emb_dim), nn.Linear(emb_dim, vocab_size, bias=False))
         self.init_weights()
+
+    @property
+    def blocks(self):
+        if self.training:
+            return self._blocks_train
+        else:
+            return self._blocks
 
     def init_weights(self):
         for module in self.modules():
@@ -178,12 +222,13 @@ class GPT(nn.Module):
 
     def forward(self,
                 input: torch.Tensor,
+                mask: Optional[torch.Tensor] = None
                 ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         b, t = input.size()
         token_emb = self.tok_emb(input)
         pos_emb = self.pos_emb[:, :t, :]
         x = self.dropout(token_emb + pos_emb)  # BxNxC
-        x = self.blocks(x)  # BxNxC
+        x = self.blocks(x, None if mask is None else mask[:, None, None, :])
         logits = self.head(x)  # BxNxV
         return logits
 
@@ -220,9 +265,12 @@ class GPT(nn.Module):
                   emb_dropout_rate: float = 0.1,
                   attn_dropout_rate: float = 0.1,
                   proj_dropout_rate: float = 0.1,
+                  checkpoint_segments: int = 0,
                   **kwargs
                   ):
+        if len(kwargs) > 0:
+            warnings.warn(f"kwargs={kwargs} are not used")
         block = BLOCK(block)(emb_dim,
                              CausalSelfAttention(max_len, emb_dim, num_heads, attn_dropout_rate, proj_dropout_rate),
                              proj_dropout_rate)
-        return cls(block, vocab_size, max_len, emb_dim, num_layers, emb_dropout_rate)
+        return cls(block, vocab_size, max_len, emb_dim, num_layers, emb_dropout_rate, checkpoint_segments)
