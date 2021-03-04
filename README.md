@@ -1,4 +1,4 @@
-# So which Transformer should I use?
+# Which Transformer architecture should I use?
 
 ## Requirements
 
