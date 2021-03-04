@@ -4,6 +4,7 @@ from typing import Dict, Optional, Tuple
 
 import datasets
 import torch
+from datasets.utils.logging import set_verbosity_error
 from homura import TensorTuple
 from homura.trainers import SupervisedTrainer
 from tokenizers import Tokenizer, models, normalizers, pre_tokenizers
@@ -11,19 +12,28 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 
-def get_data(batch_size,
+def get_data(name,
+             batch_size,
              max_len,
              num_workers=4,
              train_full=False
              ):
     max_len += 1
     datasets.disable_progress_bar()
+    set_verbosity_error()
+
     environ['TOKENIZERS_PARALLELISM'] = 'true'
-    tokenizer_path = pathlib.Path(f"wikitext_tokenizer{max_len}.json")
+    tokenizer_path = pathlib.Path(f"{name}_tokenizer{max_len}.json")
+    _name = {"wikitext": ("wikitext", "wikitext-103-v1"),
+             "gigaword": ("gigaword",)
+             }[name]
+    _column_name = {"wikitext": "text",
+                    "gigaword": "document"
+                    }[name]
     if tokenizer_path.exists():
         tokenizer = Tokenizer.from_file(str(tokenizer_path))
     else:
-        dataset = datasets.load_dataset("wikitext", "wikitext-103-raw-v1", split="train+test+validation")
+        dataset = datasets.load_dataset(*_name, split="train+test+validation")
         tokenizer = Tokenizer(models.BPE())
         tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
         tokenizer.normalizer = normalizers.Lowercase()
@@ -32,21 +42,20 @@ def get_data(batch_size,
 
         def batch_iterator(bs):
             for i in range(0, len(dataset), bs):
-                yield dataset[i: i + bs]["text"]
+                yield dataset[i: i + bs][_column_name]
 
         tokenizer.train_from_iterator(batch_iterator(1_000), length=len(dataset))
         tokenizer.save(str(tokenizer_path))
 
-    train_ds, val_ds = datasets.load_dataset("wikitext", "wikitext-103-raw-v1", split=['train' if train_full
-                                                                                       else 'train[:20%]',
-                                                                                       'validation'])
+    train_ds, val_ds = datasets.load_dataset(*_name,
+                                             split=['train' if train_full else 'train[:20%]', 'validation'])
 
     def to_ids(sent):
-        tokenized = tokenizer.encode(sent['text'])
+        tokenized = tokenizer.encode(sent[_column_name])
         return {"ids": tokenized.ids, "mask": tokenized.attention_mask}
 
-    train_ds = train_ds.filter(lambda e: len(e['text']) > max_len).map(to_ids, num_proc=10)
-    val_ds = val_ds.filter(lambda e: len(e['text']) > max_len).map(to_ids, num_proc=10)
+    train_ds = train_ds.filter(lambda e: len(e[_column_name]) > 20).map(to_ids, num_proc=10)
+    val_ds = val_ds.filter(lambda e: len(e[_column_name]) > 20).map(to_ids)
     train_ds.set_format(type='torch', columns=['ids', 'mask'])
     val_ds.set_format(type='torch', columns=['ids', 'mask'])
 
@@ -71,8 +80,10 @@ class GPTTrainer(SupervisedTrainer):
             {"params": params_dict['decay'], "weight_decay": self.optim_cfg.weight_decay},
             {"params": params_dict['no_decay'], "weight_decay": 0}
         ]
-        cls = torch.optim._multi_tensor.AdamW if self.optim_cfg.multi_tensor else torch.optim.AdamW
+        base = torch.optim._multi_tensor if self.optim_cfg.multi_tensor else torch.optim
+        cls = getattr(base, "AdamW" if self.optim_cfg.name == "adamw" else "Adam")
         self.optimizer = cls(optim_groups, lr=self.optim_cfg.lr, betas=self.optim_cfg.betas)
+        self.logger.debug(self.optimizer)
 
     def data_preprocess(self,
                         data: Dict[str, torch.Tensor]
@@ -85,10 +96,10 @@ class GPTTrainer(SupervisedTrainer):
                   ) -> None:
         ids, mask = data
         input, target = ids[:, :-1], ids[:, 1:]
+        ignore_index = -100
+        target = target.masked_fill(mask[:, :-1] == 0, ignore_index)
         with torch.cuda.amp.autocast(self._use_amp):
-            logits = self.model(input)
-            ignore_index = -1
-            target = target.masked_fill(mask[:, 1:] == 0, ignore_index)
+            logits = self.model(input, mask[:, :-1])
             loss = F.cross_entropy(logits.flatten(0, -2), target.reshape(-1), ignore_index=ignore_index)
         self.reporter.add("loss", loss.detach())
         if self.is_train:
