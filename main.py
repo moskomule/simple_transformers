@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Tuple
+
 import chika
 import homura
 import torch
@@ -20,7 +24,7 @@ class OptimConfig:
     name: str = chika.choices("adam", "adamw")
     lr: float = 3e-4
     weight_decay: float = 0.1
-    betas: tuple = chika.sequence(0.9, 0.95)
+    betas: Tuple[float] = chika.sequence(0.9, 0.95)
     warmup_iters: int = 1_000
     multi_tensor: bool = False
 
@@ -77,6 +81,7 @@ def main(cfg: Config):
             sampled_text = tokenizer.decode(sampled.view(-1).cpu().tolist(), False)
             print(f"[{ep:>4}] train loss = {trainer.history['loss/train'][-1]:.3e}"
                   f" val loss={trainer.history['loss/val'][-1]:.3e}|| {sampled_text}")
+            trainer.save("outputs", f"{ep}.pt")
 
 
 if __name__ == "__main__":

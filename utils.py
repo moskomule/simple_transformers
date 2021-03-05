@@ -108,7 +108,8 @@ class GPTTrainer(SupervisedTrainer):
                 self.scaler.scale(loss).backward()
             else:
                 loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.grad_norm_clip)
+            if self.cfg.grad_norm_clip > 0:
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.grad_norm_clip)
             if self._use_amp:
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
