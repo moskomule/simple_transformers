@@ -41,7 +41,7 @@ class ModelConfig:
     attn_dropout_rate: float = 0.1
     proj_dropout_rate: float = 0.1
 
-    checkpoint_segments: int = 0
+    enable_checkpoint: bool = False
 
 
 @chika.config
@@ -77,7 +77,7 @@ def main(cfg: Config):
         for ep in trainer.epoch_range(cfg.optim.epochs):
             trainer.train(train_loader)
             trainer.test(val_loader, "val")
-            sampled = trainer.sample(sample_tensor.to(trainer.device), num_steps=64, sampling=True, only_tok_k=10)
+            sampled = trainer.sample(sample_tensor.to(trainer.device), num_steps=64, sampling=True, only_tok_k=100)
             sampled_text = tokenizer.decode(sampled.view(-1).cpu().tolist(), False)
             print(f"[{ep:>4}] train loss = {trainer.history['loss/train'][-1]:.3e}"
                   f" val loss={trainer.history['loss/val'][-1]:.3e}|| {sampled_text}")

@@ -7,7 +7,6 @@ from typing import Callable, Dict, List, Optional, Tuple
 import torch
 from homura import Registry
 from torch import nn
-from torch.utils.checkpoint import checkpoint_sequential
 
 try:
     import opt_einsum
@@ -187,7 +186,7 @@ class GPT(nn.Module):
                  emb_dim: int,
                  num_layers: int,
                  emb_dropout_rate: float,
-                 checkpoint_segments: int = 0
+                 enable_checkpoint: bool = False
                  ):
         super().__init__()
         self.max_len = max_len
@@ -196,8 +195,9 @@ class GPT(nn.Module):
         self.pos_emb = nn.Parameter(torch.zeros(1, max_len, emb_dim))
         self.dropout = nn.Dropout(emb_dropout_rate)
         self._blocks = MaskedSequential(*[deepcopy(block) for _ in range(num_layers)])
-        if checkpoint_segments > 0:
-            self._blocks_train = functools.partial(checkpoint_sequential, self._blocks, checkpoint_segments)
+        if enable_checkpoint:
+            from fairscale.nn.misc import checkpoint_wrapper
+            self._blocks_train = checkpoint_wrapper(self._blocks)
         else:
             self._blocks_train = self._blocks
         self.head = nn.Sequential(nn.LayerNorm(emb_dim), nn.Linear(emb_dim, vocab_size, bias=False))
@@ -265,7 +265,7 @@ class GPT(nn.Module):
                   emb_dropout_rate: float = 0.1,
                   attn_dropout_rate: float = 0.1,
                   proj_dropout_rate: float = 0.1,
-                  checkpoint_segments: int = 0,
+                  enable_checkpoint: bool = False,
                   **kwargs
                   ):
         if len(kwargs) > 0:
@@ -273,4 +273,4 @@ class GPT(nn.Module):
         block = BLOCK(block)(emb_dim,
                              CausalSelfAttention(max_len, emb_dim, num_heads, attn_dropout_rate, proj_dropout_rate),
                              proj_dropout_rate)
-        return cls(block, vocab_size, max_len, emb_dim, num_layers, emb_dropout_rate, checkpoint_segments)
+        return cls(block, vocab_size, max_len, emb_dim, num_layers, emb_dropout_rate, enable_checkpoint)

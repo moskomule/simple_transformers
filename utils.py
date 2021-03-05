@@ -6,6 +6,7 @@ import datasets
 import torch
 from datasets.utils.logging import set_verbosity_error
 from homura import TensorTuple
+from homura.reporters import TQDMReporter
 from homura.trainers import SupervisedTrainer
 from tokenizers import Tokenizer, models, normalizers, pre_tokenizers
 from torch.nn import functional as F
@@ -85,6 +86,12 @@ class GPTTrainer(SupervisedTrainer):
         self.optimizer = cls(optim_groups, lr=self.optim_cfg.lr, betas=self.optim_cfg.betas)
         self.logger.debug(self.optimizer)
 
+    @property
+    def inner_tqdm(self):
+        if not hasattr(self, "_tqdm_reporter"):
+            self._tqdm_writer = [rep for rep in self.reporter.reporters if isinstance(rep, TQDMReporter)][0].writer
+        return self._tqdm_writer
+
     def data_preprocess(self,
                         data: Dict[str, torch.Tensor]
                         ) -> Tuple[torch.Tensor, int]:
@@ -116,6 +123,8 @@ class GPTTrainer(SupervisedTrainer):
             else:
                 self.optimizer.step()
             self.scheduler.step()
+            if self.step and self.step % 500 == 0:
+                self.inner_tqdm.set_postfix({"loss": loss.detach()})
 
     @torch.no_grad()
     def sample(self,

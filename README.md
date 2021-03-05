@@ -1,4 +1,4 @@
-# So which Transformer should I use?
+# Which Transformer should I use?
 
 ## Requirements
 
@@ -6,7 +6,7 @@
 conda create -n transformer python=3.8
 conda activate transformer
 conda install -c pytorch pytorch torchvision cudatoolkit=11.0
-pip install -U homura-core chika datasets tokenizers
+pip install -U homura-core chika datasets tokenizers fairscale
 ```
 
 ## Examples
