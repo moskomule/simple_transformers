@@ -6,9 +6,8 @@ import datasets
 import torch
 from datasets.utils.logging import set_verbosity_error
 from homura import TensorTuple
-from homura.reporters import TQDMReporter
 from homura.trainers import SupervisedTrainer
-from tokenizers import Tokenizer, models, normalizers, pre_tokenizers
+from tokenizers import Tokenizer, decoders, models, normalizers, pre_tokenizers, processors, trainers
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
@@ -23,6 +22,7 @@ def get_data(name,
     datasets.disable_progress_bar()
     set_verbosity_error()
 
+    # followed https://github.com/EleutherAI/gpt-neo/
     environ['TOKENIZERS_PARALLELISM'] = 'true'
     tokenizer_path = pathlib.Path(f"{name}_tokenizer{max_len}.json")
     _name = {"wikitext": ("wikitext", "wikitext-103-v1"),
@@ -36,16 +36,19 @@ def get_data(name,
     else:
         dataset = datasets.load_dataset(*_name, split="train+test+validation")
         tokenizer = Tokenizer(models.BPE())
-        tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
-        tokenizer.normalizer = normalizers.Lowercase()
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=True)
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.normalizer = normalizers.NFKC()
+        tokenizer.post_processor = processors.ByteLevel(trim_offsets=True)
         tokenizer.enable_truncation(max_length=max_len)
         tokenizer.enable_padding(length=max_len)
+        trainer = trainers.BpeTrainer(min_frequency=2, special_tokens=["<EOS>", "<PAD>"])
 
         def batch_iterator(bs):
             for i in range(0, len(dataset), bs):
                 yield dataset[i: i + bs][_column_name]
 
-        tokenizer.train_from_iterator(batch_iterator(1_000), length=len(dataset))
+        tokenizer.train_from_iterator(batch_iterator(1_000), trainer=trainer, length=len(dataset))
         tokenizer.save(str(tokenizer_path))
 
     train_ds, val_ds = datasets.load_dataset(*_name,
@@ -86,11 +89,20 @@ class GPTTrainer(SupervisedTrainer):
         self.optimizer = cls(optim_groups, lr=self.optim_cfg.lr, betas=self.optim_cfg.betas)
         self.logger.debug(self.optimizer)
 
-    @property
-    def inner_tqdm(self):
-        if not hasattr(self, "_tqdm_reporter"):
-            self._tqdm_writer = [rep for rep in self.reporter.reporters if isinstance(rep, TQDMReporter)][0].writer
-        return self._tqdm_writer
+    def _loop(self,
+              data_loader,
+              mode: str
+              ) -> None:
+
+        self.inner_tqdm = self._tqdm(data_loader)
+        for data in self.inner_tqdm:
+            if self.is_train:
+                # increment step here for `callbacks`
+                self._step += 1
+            self._iteration(data, mode)
+
+        self.reporter.report(self.epoch, mode)
+        self.logger.debug(f"epoch {self.epoch} finished")
 
     def data_preprocess(self,
                         data: Dict[str, torch.Tensor]
@@ -123,8 +135,8 @@ class GPTTrainer(SupervisedTrainer):
             else:
                 self.optimizer.step()
             self.scheduler.step()
-            if self.step and self.step % 500 == 0:
-                self.inner_tqdm.set_postfix({"loss": loss.detach()})
+            if self.step % 500 == 0:
+                self.inner_tqdm.set_postfix({"loss": f"{loss.cpu().item():.3e}"})
 
     @torch.no_grad()
     def sample(self,
