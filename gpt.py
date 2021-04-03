@@ -1,74 +1,16 @@
-import pathlib
-from os import environ
+from __future__ import annotations
+
 from typing import Dict, Optional, Tuple
 
-import datasets
+import chika
+import homura
 import torch
-from datasets.utils.logging import set_verbosity_error
 from homura import TensorTuple
 from homura.trainers import SupervisedTrainer
-from tokenizers import Tokenizer, decoders, models, normalizers, pre_tokenizers, processors, trainers
 from torch.nn import functional as F
-from torch.utils.data import DataLoader
 
-
-def get_data(name,
-             batch_size,
-             max_len,
-             num_workers=4,
-             train_full=False
-             ):
-    max_len += 1
-    datasets.disable_progress_bar()
-    set_verbosity_error()
-
-    # followed https://github.com/EleutherAI/gpt-neo/
-    environ['TOKENIZERS_PARALLELISM'] = 'true'
-    tokenizer_path = pathlib.Path(f"{name}_tokenizer{max_len}.json")
-    _name = {"wikitext": ("wikitext", "wikitext-103-v1"),
-             "gigaword": ("gigaword",)
-             }[name]
-    _column_name = {"wikitext": "text",
-                    "gigaword": "document"
-                    }[name]
-    if tokenizer_path.exists():
-        tokenizer = Tokenizer.from_file(str(tokenizer_path))
-    else:
-        dataset = datasets.load_dataset(*_name, split="train+test+validation")
-        tokenizer = Tokenizer(models.BPE())
-        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=True)
-        tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.normalizer = normalizers.NFKC()
-        tokenizer.post_processor = processors.ByteLevel(trim_offsets=True)
-        tokenizer.enable_truncation(max_length=max_len)
-        tokenizer.enable_padding(length=max_len)
-        trainer = trainers.BpeTrainer(min_frequency=2, special_tokens=["<EOS>", "<PAD>"])
-
-        def batch_iterator(bs):
-            for i in range(0, len(dataset), bs):
-                yield dataset[i: i + bs][_column_name]
-
-        tokenizer.train_from_iterator(batch_iterator(1_000), trainer=trainer, length=len(dataset))
-        tokenizer.save(str(tokenizer_path))
-
-    train_ds, val_ds = datasets.load_dataset(*_name,
-                                             split=['train' if train_full else 'train[:20%]', 'validation'])
-
-    def to_ids(sent):
-        tokenized = tokenizer.encode(sent[_column_name])
-        return {"ids": tokenized.ids, "mask": tokenized.attention_mask}
-
-    train_ds = train_ds.filter(lambda e: len(e[_column_name]) > 20).map(to_ids, num_proc=10)
-    val_ds = val_ds.filter(lambda e: len(e[_column_name]) > 20).map(to_ids)
-    train_ds.set_format(type='torch', columns=['ids', 'mask'])
-    val_ds.set_format(type='torch', columns=['ids', 'mask'])
-
-    return (
-        DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True),
-        DataLoader(val_ds, batch_size=batch_size, num_workers=num_workers),
-        tokenizer,
-        tokenizer.get_vocab_size()
-    )
+from models.gpt import GPT
+from nlp_utils import get_data
 
 
 class GPTTrainer(SupervisedTrainer):
@@ -166,3 +108,85 @@ class GPTTrainer(SupervisedTrainer):
                 next = probs.argmax(dim=-1)
             x = torch.cat([x, next], dim=1)
         return x
+
+
+@chika.config
+class DataConfig:
+    name: str = chika.choices("wikitext", "gigaword")
+    batch_size: int = 256
+    max_len: int = 128
+    train_full: bool = False
+
+
+@chika.config
+class OptimConfig:
+    epochs: int = 20
+    name: str = chika.choices("adam", "adamw")
+    lr: float = 3e-4
+    weight_decay: float = 0.1
+    betas: Tuple[float] = chika.sequence(0.9, 0.95)
+    warmup_iters: int = 1_000
+    multi_tensor: bool = False
+
+
+@chika.config
+class ModelConfig:
+    block: str = chika.choices("ipre_ln", "pre_ln", "post_ln")
+    grad_norm_clip: float = 1.0
+
+    num_heads: int = 8
+    emb_dim: int = 512
+    num_layers: int = 12
+    emb_dropout_rate: float = 0.1
+    attn_dropout_rate: float = 0.1
+    proj_dropout_rate: float = 0.1
+
+    enable_checkpoint: bool = False
+
+
+@chika.config
+class Config:
+    model: ModelConfig
+    optim: OptimConfig
+    data: DataConfig
+    seed: int = 1
+    gpu: int = 0
+    amp: bool = False
+
+
+@chika.main(cfg_cls=Config, strict=True)
+def main(cfg: Config):
+    print(cfg)
+    torch.cuda.set_device(cfg.gpu)
+    homura.set_seed(cfg.seed)
+    train_loader, val_loader, tokenizer, vocab_size = get_data(**cfg.data.to_dict())
+    model = GPT.construct(**cfg.model.to_dict(), vocab_size=vocab_size, max_len=cfg.data.max_len)
+    # optimizer is setup automatically
+    scheduler = homura.lr_scheduler.CosineAnnealingWithWarmup(cfg.optim.epochs * len(train_loader), 1,
+                                                              cfg.optim.warmup_iters)
+    sample_text = tokenizer.encode("however, as can be seen from")
+    # sample_text = tokenizer.encode("in the beginning was the word")
+    sample_tensor = torch.tensor(sample_text.ids[:sum(sample_text.attention_mask)]).view(1, -1)
+    with GPTTrainer(model, None, None,
+                    reporters=[homura.reporters.TensorboardReporter(".")],
+                    scheduler=scheduler,
+                    cfg=cfg.model,
+                    optim_cfg=cfg.optim,
+                    use_amp=cfg.amp
+                    ) as trainer:
+        for ep in trainer.epoch_range(cfg.optim.epochs):
+            trainer.train(train_loader)
+            trainer.test(val_loader, "val")
+            sampled = trainer.sample(sample_tensor.to(trainer.device), num_steps=64, sampling=True, only_tok_k=100)
+            sampled_text = tokenizer.decode(sampled.view(-1).cpu().tolist(), False)
+            print(f"[{ep:>4}] train loss = {trainer.history['loss/train'][-1]:.3e}"
+                  f" val loss={trainer.history['loss/val'][-1]:.3e}|| {sampled_text}")
+            trainer.save("outputs", f"{ep}.pt")
+
+
+if __name__ == "__main__":
+    import warnings
+
+    # to avoid "Detected call of `lr_scheduler.step()` before `optimizer.step()`... when using AMP
+    warnings.filterwarnings("ignore", message="Detected call of")
+    main()
