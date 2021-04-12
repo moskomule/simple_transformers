@@ -56,7 +56,8 @@ def dotproduct_self_attention(query: torch.Tensor,
     Returns: results
 
     """
-    context = einsum("bhkn,bhkm->bhmn", query, key).div(math.sqrt(query.size(1)))
+    # attn/\sqrt{dim_head}
+    context = einsum("bhkn,bhkm->bhmn", query, key).div(math.sqrt(query.size(-2)))
     if mask is not None:
         size = context.size(-1)
         context = context.masked_fill(mask[:, :, :size, :size] == 0, float('-inf'))

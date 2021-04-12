@@ -13,15 +13,22 @@ pip install -U homura-core chika datasets tokenizers
 
 ### Language Modeling
 
-Train GPT-1 on wikitext. Currently, Transformer blocks of improved pre LN, pre LN, and post LN are available for
-comparison.
+#### GPT
+
+Train GPT-like models on wikitext or GigaText. Currently, Transformer blocks of improved pre LN, pre LN, and post LN are
+available for comparison.
 
 ```commandline
-python main.py [--model.block {ipre_ln, pre_ln, post_ln}] [--amp]
+python gpt.py [--model.block {ipre_ln, pre_ln, post_ln}] [--amp]
 ```
 
-- [x] blocks
-- [ ] self attention
+#### Bert
+
+Work in progress
+
+### Image Recognition
+
+Work in progress
 
 ## Acknowledgement
 
