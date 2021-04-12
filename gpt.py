@@ -113,18 +113,18 @@ class GPTTrainer(SupervisedTrainer):
 @chika.config
 class DataConfig:
     name: str = chika.choices("wikitext", "gigaword")
-    batch_size: int = 256
-    max_len: int = 128
+    batch_size: int = 64
+    max_len: int = 150
     train_full: bool = False
 
 
 @chika.config
 class OptimConfig:
     epochs: int = 20
-    name: str = chika.choices("adam", "adamw")
-    lr: float = 3e-4
+    name: str = chika.choices("adamw", "adam")
+    lr: float = 2e-4
     weight_decay: float = 0.1
-    betas: Tuple[float] = chika.sequence(0.9, 0.95)
+    betas: Tuple[float] = chika.sequence(0.9, 0.98)
     warmup_iters: int = 1_000
     multi_tensor: bool = False
 
@@ -135,7 +135,7 @@ class ModelConfig:
     grad_norm_clip: float = 1.0
 
     num_heads: int = 8
-    emb_dim: int = 512
+    emb_dim: int = 768
     num_layers: int = 12
     emb_dropout_rate: float = 0.1
     attn_dropout_rate: float = 0.1
