@@ -181,7 +181,7 @@ def main(cfg: Config):
             sampled_text = tokenizer.decode(sampled.view(-1).cpu().tolist(), False)
             print(f"[{ep:>4}] train loss = {trainer.history['loss/train'][-1]:.3e}"
                   f" val loss={trainer.history['loss/val'][-1]:.3e}|| {sampled_text}")
-            trainer.save("outputs", f"{ep}.pt")
+            trainer.save("outputs", f"{ep}")
 
 
 if __name__ == "__main__":
