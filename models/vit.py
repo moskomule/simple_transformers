@@ -123,8 +123,9 @@ class ViT(TransformerBase):
 
 
 class ViTEMA(EMA):
+    @property
     def param_groups(self):
-        return self.original_model.param_groups()
+        return self.original_model.param_groups
 
 
 @ViTs.register
