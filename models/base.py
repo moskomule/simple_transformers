@@ -48,6 +48,9 @@ class TransformerBase(nn.Module):
                 decay.add(module.weight)
                 if module.bias is not None:
                     no_decay.add(module.bias)
+        for param in self.parameters():
+            if param not in no_decay:
+                decay.add(param)
         assert len([param for param in self.parameters()]) == len(decay) + len(no_decay)
         return {"decay": list(decay), "no_decay": list(no_decay)}
 

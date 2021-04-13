@@ -245,12 +245,12 @@ class CaiT(TransformerBase):
                    emb_dropout_rate, emb_dropout_rate, droppath_rate, in_channels=in_channels,
                    norm=partial(nn.LayerNorm, eps=layernorm_eps), activation=activation)
 
-
+        
 @ViTs.register
-def cait_XS_24(**kwargs):
+def cait_xs24(**kwargs):
     return CaiT.construct(emb_dim=288, num_layers=24, num_cls_layers=2, num_heads=6, patch_size=16, **kwargs)
 
 
 @ViTs.register
-def cait_S_24(**kwargs):
+def cait_x24(**kwargs):
     return CaiT.construct(emb_dim=384, num_layers=24, num_cls_layers=2, num_heads=8, patch_size=16, **kwargs)
