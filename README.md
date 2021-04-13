@@ -3,9 +3,9 @@
 ## Requirements
 
 ```commandline
-conda create -n transformer python=3.8
+conda create -n transformer python=3.9
 conda activate transformer
-conda install -c pytorch pytorch torchvision cudatoolkit=11.0
+conda install -c pytorch -c conda-forge pytorch torchvision cudatoolkit
 pip install -U homura-core chika datasets tokenizers
 ```
 
@@ -32,4 +32,6 @@ Work in progress
 
 ## Acknowledgement
 
-For this project, I learned a lot from Andrej's [minGPT](https://github.com/karpathy/mingpt).
+For this project, I learned a lot from Andrej's [minGPT](https://github.com/karpathy/mingpt),
+Ross's [timm](https://github.com/rwightman/pytorch-image-models), and
+FAIR's [ClassyVision](https://github.com/facebookresearch/ClassyVision).
