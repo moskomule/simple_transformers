@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Type
 
 import torch
 from homura import Registry
@@ -9,18 +9,30 @@ from .attentions import SelfAttention
 BLOCK = Registry("block", nn.Module)
 
 
+def act_func(name: str
+             ) -> nn.Module:
+    _acts = {"relu": nn.ReLU,
+             "leaky_relu": nn.LeakyReLU,
+             "gelu": nn.GELU,
+             "silu": nn.SiLU}
+    return _acts[name]()
+
+
 class BlockBase(nn.Module):
     def __init__(self,
-                 ebm_dim: int,
+                 emb_dim: int,
                  attention: SelfAttention,
-                 dropout_rate: float):
+                 dropout_rate: float,
+                 widen_factor: int = 4,
+                 activation: str = "gelu",
+                 norm: Type[nn.LayerNorm] = nn.LayerNorm):
         super().__init__()
-        self.ln1 = nn.LayerNorm(ebm_dim)
-        self.ln2 = nn.LayerNorm(ebm_dim)
+        self.ln1 = norm(emb_dim)
+        self.ln2 = norm(emb_dim)
         self.attention = attention
-        self.mlp = nn.Sequential(nn.Linear(ebm_dim, 4 * ebm_dim),
-                                 nn.GELU(),
-                                 nn.Linear(4 * ebm_dim, ebm_dim),
+        self.mlp = nn.Sequential(nn.Linear(emb_dim, widen_factor * emb_dim),
+                                 act_func(activation),
+                                 nn.Linear(widen_factor * emb_dim, emb_dim),
                                  nn.Dropout(dropout_rate))
 
     def forward(self,
@@ -74,3 +86,21 @@ class ImprovedPreLNBlock(BlockBase):
         x = input
         x = x + self.attention(self.ln1(x), mask)
         return x + self.mlp(self.ln2(x))
+
+
+@BLOCK.register(name="timm_ln")
+class TimmPreLNBlock(ImprovedPreLNBlock):
+    def __init__(self,
+                 emb_dim: int,
+                 attention: SelfAttention,
+                 dropout_rate: float,
+                 widen_factor: int = 4,
+                 activation: str = "gelu",
+                 norm: Type[nn.LayerNorm] = nn.LayerNorm):
+        super().__init__(emb_dim, attention, dropout_rate, widen_factor, activation, norm)
+        # double dropout
+        self.mlp = nn.Sequential(nn.Linear(emb_dim, widen_factor * emb_dim),
+                                 act_func(activation),
+                                 nn.Dropout(dropout_rate),
+                                 nn.Linear(widen_factor * emb_dim, emb_dim),
+                                 nn.Dropout(dropout_rate))
