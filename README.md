@@ -1,4 +1,4 @@
-# Which Transformer architecture should I use?
+# Transformers
 
 ## Requirements
 
@@ -6,7 +6,7 @@
 conda create -n transformer python=3.9
 conda activate transformer
 conda install -c pytorch -c conda-forge pytorch torchvision cudatoolkit
-pip install -U homura-core chika datasets tokenizers fairscale rich
+pip install -U homura-core chika datasets tokenizers rich # fairscale 
 ```
 
 ## Examples
@@ -29,6 +29,8 @@ Work in progress
 ### Image Recognition
 
 Train ImageNet classification models.
+
+Currently, ViT, and CaiT are implemented.
 
 ```commandline
 python vit.py [--amp] [--model.ema]
