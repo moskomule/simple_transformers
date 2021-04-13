@@ -88,12 +88,13 @@ class ImprovedPreLNBlock(BlockBase):
         return x + self.mlp(self.ln2(x))
 
 
-@BLOCK.register(name="timm_ln")
-class TimmPreLNBlock(ImprovedPreLNBlock):
+@BLOCK.register(name="timm")
+class TimmPreLNBlock(BlockBase):
     def __init__(self,
                  emb_dim: int,
                  attention: SelfAttention,
                  dropout_rate: float,
+                 droppath_rate: float,
                  widen_factor: int = 4,
                  activation: str = "gelu",
                  norm: Type[nn.LayerNorm] = nn.LayerNorm):
@@ -104,3 +105,24 @@ class TimmPreLNBlock(ImprovedPreLNBlock):
                                  nn.Dropout(dropout_rate),
                                  nn.Linear(widen_factor * emb_dim, emb_dim),
                                  nn.Dropout(dropout_rate))
+        self.droppath_rate = droppath_rate
+
+    def forward(self,
+                input: torch.Tensor,
+                mask=None
+                ) -> torch.Tensor:
+        x = input
+        x = x + self.drop_path(self.attention(self.ln1(x), mask), self.droppath_rate, self.training)
+        x = x + self.drop_path(self.mlp(self.ln2(x), mask), self.droppath_rate, self.training)
+        return x
+
+    def drop_path(self,
+                  input: torch.Tensor,
+                  ) -> torch.Tensor:
+        if not self.training or self.droppath_rate == 0:
+            return input
+
+        keep_prob = 1 - self.droppath_rate
+        # 1 with prob. of keep_prob
+        drop = input.new_empty(input.size(0), 1, 1).bernoulli_(keep_prob)
+        return input.div(keep_prob).mul(drop)

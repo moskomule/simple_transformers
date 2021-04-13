@@ -1,11 +1,12 @@
 import warnings
 from copy import deepcopy
-from typing import Dict, List, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 from torch import nn
 
 from .attentions import SelfAttention
+from .base import TransformerBase
 from .blocks import BLOCK, BlockBase
 
 
@@ -19,7 +20,7 @@ class MaskedSequential(nn.Sequential):
         return input
 
 
-class GPT(nn.Module):
+class GPT(TransformerBase):
     def __init__(self,
                  block: BlockBase,
                  vocab_size: int,
@@ -29,27 +30,15 @@ class GPT(nn.Module):
                  emb_dropout_rate: float,
                  enable_checkpoint: bool = False
                  ):
-        super().__init__()
+        super().__init__(MaskedSequential(*[deepcopy(block) for _ in range(num_layers)]), enable_checkpoint)
         self.max_len = max_len
         self.num_layers = num_layers
         self.tok_emb = nn.Embedding(vocab_size, emb_dim)
         self.pos_emb = nn.Parameter(torch.zeros(1, max_len, emb_dim))
         self.dropout = nn.Dropout(emb_dropout_rate)
-        self._blocks = MaskedSequential(*[deepcopy(block) for _ in range(num_layers)])
-        self._blocks_train = self._blocks
-        if enable_checkpoint:
-            from fairscale.nn.misc import checkpoint_wrapper
-            self._blocks_train = checkpoint_wrapper(self._blocks)
         self.head = nn.Sequential(nn.LayerNorm(emb_dim), nn.Linear(emb_dim, vocab_size, bias=False))
         self.register_buffer("mask", torch.tril(torch.ones(max_len, max_len, dtype=torch.bool))[None, None])
         self.init_weights()
-
-    @property
-    def blocks(self):
-        if self.training:
-            return self._blocks_train
-        else:
-            return self._blocks
 
     def init_weights(self):
         for module in self.modules():
@@ -73,28 +62,6 @@ class GPT(nn.Module):
         x = self.blocks(x, None if mask is None else mask[:, None, None, :])
         logits = self.head(x)  # BxNxV
         return logits
-
-    @property
-    def param_groups(self
-                     ) -> Dict[str, List]:
-
-        decay = set()
-        no_decay = set()
-        apply_decay = (nn.Linear,)
-        no_apply_decay = (nn.LayerNorm, nn.Embedding)
-        for name, param in self.named_parameters():
-            if "pos_emb" in name:
-                no_decay.add(param)
-        for module in self.modules():
-            if isinstance(module, no_apply_decay):
-                for param in module.parameters():
-                    no_decay.add(param)
-            elif isinstance(module, apply_decay):
-                decay.add(module.weight)
-                if module.bias is not None:
-                    no_decay.add(module.bias)
-        assert len([param for param in self.parameters()]) == len(decay) + len(no_decay)
-        return {"decay": list(decay), "no_decay": list(no_decay)}
 
     @classmethod
     def construct(cls,
