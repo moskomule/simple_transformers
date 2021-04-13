@@ -127,12 +127,27 @@ class ViTEMA(EMA):
 
 @ViTs.register
 def vit_t16(**kwargs) -> ViT:
-    return ViT.construct(192, 12, 3, 16, emb_dropout_rate=0.1, **kwargs)
+    return ViT.construct(192, 12, 3, 16, **kwargs)
 
 
 @ViTs.register
 def vit_b16(**kwargs) -> ViT:
-    return ViT.construct(768, 12, 12, 16, emb_dropout_rate=0.1, **kwargs)
+    return ViT.construct(768, 12, 12, 16, **kwargs)
+
+
+@ViTs.register
+def vit_b32(**kwargs) -> ViT:
+    return ViT.construct(768, 12, 12, 32, **kwargs)
+
+
+@ViTs.register
+def vit_l16(**kwargs) -> ViT:
+    return ViT.construct(1024, 24, 16, 16, **kwargs)
+
+
+@ViTs.register
+def vit_l32(**kwargs) -> ViT:
+    return ViT.construct(1024, 24, 16, 32, **kwargs)
 
 
 class CaiTSequential(nn.Sequential):
@@ -243,14 +258,31 @@ class CaiT(TransformerBase):
         cls_attention = ClassAttention(emb_dim, num_heads, attn_dropout_rate, emb_dropout_rate)
         return cls(attention, cls_attention, num_classes, image_size, patch_size, emb_dim, num_layers, num_cls_layers,
                    emb_dropout_rate, emb_dropout_rate, droppath_rate, in_channels=in_channels,
-                   norm=partial(nn.LayerNorm, eps=layernorm_eps), activation=activation)
+                   norm=partial(nn.LayerNorm, eps=layernorm_eps), activation=activation, **kwargs)
 
-        
+
 @ViTs.register
 def cait_xs24(**kwargs):
     return CaiT.construct(emb_dim=288, num_layers=24, num_cls_layers=2, num_heads=6, patch_size=16, **kwargs)
 
 
 @ViTs.register
-def cait_x24(**kwargs):
+def cait_s24_224(**kwargs):
     return CaiT.construct(emb_dim=384, num_layers=24, num_cls_layers=2, num_heads=8, patch_size=16, **kwargs)
+
+
+@ViTs.register
+def cait_s24_384(**kwargs):
+    return CaiT.construct(emb_dim=384, num_layers=24, num_cls_layers=2, num_heads=8, patch_size=16, image_size=384,
+                          **kwargs)
+
+
+@ViTs.register
+def cait_s24(**kwargs):
+    return cait_s24_384(**kwargs)
+
+
+@ViTs.register
+def cait_m36(**kwargs):
+    return CaiT.construct(emb_dim=384, num_layers=36, num_cls_layers=2, num_heads=8, patch_size=16, image_size=384,
+                          init_scale=1e-6, **kwargs)

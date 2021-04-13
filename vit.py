@@ -15,6 +15,8 @@ class ViTTraner(SupervisedTrainer):
     def __init__(self, *args, **kwargs):
         self.optim_cfg = kwargs.pop('optim_cfg')
         super().__init__(*args, **kwargs)
+        if homura.is_distributed():
+            self.model.find_unused_parameters = True
 
     def set_optimizer(self
                       ) -> None:
@@ -92,7 +94,7 @@ def main(cfg: Config):
                    use_amp=cfg.amp,
                    use_cuda_nonblocking=True,
                    report_accuracy_topk=5,
-                   optim_cfg=cfg.optim
+                   optim_cfg=cfg.optim,
                    ) as trainer:
         for _ in trainer.epoch_range(cfg.optim.epochs):
             trainer.train(train_loader)

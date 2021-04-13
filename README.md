@@ -6,7 +6,7 @@
 conda create -n transformer python=3.9
 conda activate transformer
 conda install -c pytorch -c conda-forge pytorch torchvision cudatoolkit
-pip install -U homura-core chika datasets tokenizers rich
+pip install -U homura-core chika datasets tokenizers fairscale rich
 ```
 
 ## Examples

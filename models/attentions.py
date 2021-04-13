@@ -80,8 +80,8 @@ class SelfAttention(nn.Module):
         self.proj = nn.Linear(emb_dim, emb_dim, bias=proj_bias)
         self.attn_dropout = nn.Dropout(attn_dropout_rate)
         self.proj_dropout = nn.Dropout(proj_dropout_rate)
-        self.talking_heads = talking_heads
-        if self.talking_heads:
+        self.pre_talk, self.post_talk = None, None
+        if talking_heads:
             self.pre_talk = nn.Parameter(torch.randn(self.num_heads, self.num_heads))
             self.post_talk = nn.Parameter(torch.randn(self.num_heads, self.num_heads))
 
@@ -101,7 +101,7 @@ class SelfAttention(nn.Module):
         query = self.query(input)
         key = self.key(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
         value = self.value(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
-        attention = dotproduct_self_attention(query, key, value, mask, self.attn_dropout)
+        attention = dotproduct_self_attention(query, key, value, mask, self.attn_dropout, self.pre_talk, self.post_talk)
         attention = attention.reshape(b, self.emb_dim, -1).transpose(-1, -2)
         return self.proj_dropout(self.proj(attention))
 

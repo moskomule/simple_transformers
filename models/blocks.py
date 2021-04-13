@@ -152,5 +152,5 @@ class LayerScaleBlock(TimmPreLNBlock):
             x = cls_token
             input = torch.cat((cls_token, input), dim=1)
         x = x + self.drop_path(self.gamma1 * self.attention(self.ln1(input)))
-        x = x + self.drop_path(self.gamma1 * self.mlp(self.ln2(x)))
+        x = x + self.drop_path(self.gamma2 * self.mlp(self.ln2(x)))
         return x
