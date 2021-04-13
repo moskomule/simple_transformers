@@ -129,7 +129,7 @@ class ViTEMA(EMA):
 
 @ViTs.register
 def vit_t16(**kwargs) -> ViT:
-    return ViT.construct(192, 12, 3, **kwargs)
+    return ViT.construct(192, 12, 3, 16, **kwargs)
 
 
 @ViTs.register
