@@ -1,12 +1,29 @@
 import chika
-from homura import distributed_ready_main, get_num_nodes, lr_scheduler, optim, \
-    reporters
+import torch
+from homura import distributed_ready_main, lr_scheduler, reporters
 from homura.modules import SmoothedCrossEntropy
 from homura.trainers import SupervisedTrainer
 from homura.vision.data import DATASET_REGISTRY
 from torchvision.transforms import AutoAugment
 
 from models.vit import ViT
+
+
+class ViTTraner(SupervisedTrainer):
+    def __init__(self, *args, **kwargs):
+        self.optim_cfg = kwargs.pop('optim_cfg')
+        super().__init__(*args, **kwargs)
+
+    def set_optimizer(self
+                      ) -> None:
+        params_dict = self.accessible_model.param_groups
+        optim_groups = [
+            {"params": params_dict['decay'], "weight_decay": self.optim_cfg.weight_decay},
+            {"params": params_dict['no_decay'], "weight_decay": 0}
+        ]
+        self.optimizer = torch.optim._multi_tensor.AdamW(optim_groups, lr=self.optim_cfg.lr,
+                                                         weight_decay=self.optim_cfg.weight_decay)
+        self.logger.debug(self.optimizer)
 
 
 @chika.config
@@ -16,7 +33,9 @@ class DataConfig:
 
 @chika.config
 class ModelConfig:
-    ebm_dim: int = 768
+    emb_dim: int = 768
+    patch_size: int = 16
+    num_layers: int = 12
     num_heads: int = 12
     attn_dropout_rate: float = 0
     proj_dropout_rate: float = 0
@@ -44,26 +63,26 @@ class Config:
 @chika.main(cfg_cls=Config)
 @distributed_ready_main
 def main(cfg: Config):
-    vs = DATASET_REGISTRY(cfg.data.name)
+    vs = DATASET_REGISTRY("imagenet")
     aa = vs.default_train_da.copy() + [AutoAugment()]
-    train_loader, test_loader = DATASET_REGISTRY("imagenet")(cfg.batch_size,
-                                                             train_da=aa,
-                                                             train_size=cfg.data.batch_size * 50 if cfg.debug else None,
-                                                             test_size=cfg.data.batch_size * 50 if cfg.debug else None,
-                                                             num_workers=cfg.num_workers)
+    train_loader, test_loader = vs(batch_size=cfg.data.batch_size,
+                                   train_da=aa,
+                                   train_size=cfg.data.batch_size * 50 if cfg.debug else None,
+                                   test_size=cfg.data.batch_size * 50 if cfg.debug else None,
+                                   num_workers=8)
     model = ViT.construct(cfg.model)
-    optimizer = optim.AdamW(lr=cfg.optim.lr * cfg.data.batch_size * get_num_nodes() / 256,
-                            weight_decay=cfg.optim.weight_decay, multi_tensor=True)
     scheduler = lr_scheduler.CosineAnnealingWithWarmup(cfg.optim.epochs, 1, 5)
 
-    with SupervisedTrainer(model,
-                           optimizer,
-                           SmoothedCrossEntropy(),
-                           reporters=[reporters.TensorboardReporter(".")],
-                           scheduler=scheduler,
-                           use_amp=cfg.amp,
-                           use_cuda_nonblocking=True,
-                           report_accuracy_topk=5) as trainer:
+    with ViTTraner(model,
+                   None,
+                   SmoothedCrossEntropy(),
+                   reporters=[reporters.TensorboardReporter(".")],
+                   scheduler=scheduler,
+                   use_amp=cfg.amp,
+                   use_cuda_nonblocking=True,
+                   report_accuracy_topk=5,
+                   optim_cfg=cfg.optim
+                   ) as trainer:
         for epoch in trainer.epoch_range(cfg.optim.epochs):
             trainer.train(train_loader)
             trainer.test(test_loader)

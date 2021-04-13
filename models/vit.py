@@ -46,8 +46,8 @@ class ViT(TransformerBase):
                  activation: str = "gelu",
                  enable_checkpointing=False
                  ):
-        blocks = [TimmPreLNBlock(emb_dim, deepcopy(attention), dropout_rate=dropout_rate, attention=activation,
-                                 droppath_rate=r, widen_factor=mlp_widen_factor, norm=norm)
+        blocks = [TimmPreLNBlock(emb_dim, deepcopy(attention), dropout_rate=dropout_rate, droppath_rate=r,
+                                 widen_factor=mlp_widen_factor, norm=norm, activation=activation, )
                   for r in [x.item() for x in torch.linspace(0, droppath_rate, num_layers)]
                   ]
         super().__init__(nn.Sequential(*blocks), enable_checkpointing)

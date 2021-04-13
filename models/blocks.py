@@ -112,8 +112,8 @@ class TimmPreLNBlock(BlockBase):
                 mask=None
                 ) -> torch.Tensor:
         x = input
-        x = x + self.drop_path(self.attention(self.ln1(x), mask), self.droppath_rate, self.training)
-        x = x + self.drop_path(self.mlp(self.ln2(x), mask), self.droppath_rate, self.training)
+        x = x + self.drop_path(self.attention(self.ln1(x)))
+        x = x + self.drop_path(self.mlp(self.ln2(x)))
         return x
 
     def drop_path(self,
