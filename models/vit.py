@@ -97,9 +97,10 @@ class ViT(TransformerBase):
                   image_size: int = 224,
                   in_channels: int = 3,
                   layernorm_eps: float = 1e-6,
-                  activation: str = "gelu"
+                  activation: str = "gelu",
                   ) -> ViT:
-        attention = SelfAttention(cfg.emb_dim, cfg.num_heads, cfg.attn_dropout_rate, cfg.proj_dropout_rate)
+        attention = SelfAttention(cfg.emb_dim, cfg.num_heads, cfg.attn_dropout_rate, cfg.proj_dropout_rate,
+                                  qkv_bias=False)
         return cls(attention, num_classes, image_size, cfg.patch_size, cfg.emb_dim, cfg.num_layers,
                    cfg.emb_dropout_rate, cfg.proj_dropout_rate, cfg.droppath_rate, in_channels=in_channels,
                    norm=partial(nn.LayerNorm, eps=layernorm_eps), activation=activation)
