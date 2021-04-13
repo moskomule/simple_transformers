@@ -6,11 +6,15 @@ from functools import partial
 from typing import Type
 
 import torch
+from homura import Registry
+from homura.modules import EMA
 from torch import nn
 
 from .attentions import SelfAttention
 from .base import TransformerBase
 from .blocks import TimmPreLNBlock
+
+ViTs = Registry("vit", nn.Module)
 
 
 class PatchEmbed(nn.Module):
@@ -30,6 +34,9 @@ class PatchEmbed(nn.Module):
 
 
 class ViT(TransformerBase):
+    """ Vision Transformer
+    """
+
     def __init__(self,
                  attention: SelfAttention,
                  num_classes: int,
@@ -92,15 +99,34 @@ class ViT(TransformerBase):
 
     @classmethod
     def construct(cls,
-                  cfg,
+                  emb_dim: int,
+                  num_layers: int,
+                  num_heads: int,
+                  patch_size: int,
+                  emb_dropout_rate: float = 0,
+                  attn_dropout_rate: float = 0,
+                  proj_dropout_rate: float = 0,
+                  dropout_rate: float = 0,
+                  droppath_rate: float = 0,
                   num_classes: int = 1_000,
                   image_size: int = 224,
                   in_channels: int = 3,
                   layernorm_eps: float = 1e-6,
                   activation: str = "gelu",
+                  **kwargs
                   ) -> ViT:
-        attention = SelfAttention(cfg.emb_dim, cfg.num_heads, cfg.attn_dropout_rate, cfg.proj_dropout_rate,
+        attention = SelfAttention(emb_dim, num_heads, attn_dropout_rate, proj_dropout_rate,
                                   qkv_bias=False)
-        return cls(attention, num_classes, image_size, cfg.patch_size, cfg.emb_dim, cfg.num_layers,
-                   cfg.emb_dropout_rate, cfg.proj_dropout_rate, cfg.droppath_rate, in_channels=in_channels,
+        return cls(attention, num_classes, image_size, patch_size, emb_dim, num_layers,
+                   emb_dropout_rate, proj_dropout_rate, droppath_rate, in_channels=in_channels,
                    norm=partial(nn.LayerNorm, eps=layernorm_eps), activation=activation)
+
+
+class ViTEMA(EMA):
+    def param_groups(self):
+        return self.original_model.param_groups()
+
+
+@ViTs.register
+def vit_b16(**kwargs) -> ViT:
+    return ViT.construct(768, 12, 12, 16, droppath_rate=0.1, **kwargs)

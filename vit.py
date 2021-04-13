@@ -1,12 +1,13 @@
 import chika
 import torch
-from homura import distributed_ready_main, lr_scheduler, reporters
+from homura import lr_scheduler, reporters
 from homura.modules import SmoothedCrossEntropy
 from homura.trainers import SupervisedTrainer
 from homura.vision.data import DATASET_REGISTRY
 from torchvision.transforms import AutoAugment
 
-from models.vit import ViT
+from models.vit import ViTEMA, ViTs
+from utils import distributed_ready_main
 
 
 class ViTTraner(SupervisedTrainer):
@@ -33,14 +34,8 @@ class DataConfig:
 
 @chika.config
 class ModelConfig:
-    emb_dim: int = 768
-    patch_size: int = 16
-    num_layers: int = 12
-    num_heads: int = 12
-    attn_dropout_rate: float = 0
-    proj_dropout_rate: float = 0
-    emb_dropout_rate: float = 0
-    droppath_rate: float = 0
+    name: str = chika.choices(*ViTs.choices())
+    ema: bool = False
 
 
 @chika.config
@@ -70,7 +65,9 @@ def main(cfg: Config):
                                    train_size=cfg.data.batch_size * 50 if cfg.debug else None,
                                    test_size=cfg.data.batch_size * 50 if cfg.debug else None,
                                    num_workers=8)
-    model = ViT.construct(cfg.model)
+    model = ViTs(cfg.model.name)()
+    if cfg.model.ema:
+        model = ViTEMA(model, 0.99996)
     scheduler = lr_scheduler.CosineAnnealingWithWarmup(cfg.optim.epochs, 1, 5)
 
     with ViTTraner(model,
