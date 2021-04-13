@@ -6,7 +6,7 @@
 conda create -n transformer python=3.9
 conda activate transformer
 conda install -c pytorch -c conda-forge pytorch torchvision cudatoolkit
-pip install -U homura-core chika datasets tokenizers
+pip install -U homura-core chika datasets tokenizers rich
 ```
 
 ## Examples
@@ -28,7 +28,11 @@ Work in progress
 
 ### Image Recognition
 
-Work in progress
+Train ImageNet classification models.
+
+```commandline
+python vit.py [--amp] [--model.ema]
+```
 
 ## Acknowledgement
 

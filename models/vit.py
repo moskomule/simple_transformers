@@ -115,8 +115,7 @@ class ViT(TransformerBase):
                   activation: str = "gelu",
                   **kwargs
                   ) -> ViT:
-        attention = SelfAttention(emb_dim, num_heads, attn_dropout_rate, proj_dropout_rate,
-                                  qkv_bias=False)
+        attention = SelfAttention(emb_dim, num_heads, attn_dropout_rate, proj_dropout_rate)
         return cls(attention, num_classes, image_size, patch_size, emb_dim, num_layers,
                    emb_dropout_rate, proj_dropout_rate, droppath_rate, in_channels=in_channels,
                    norm=partial(nn.LayerNorm, eps=layernorm_eps), activation=activation)
@@ -129,5 +128,10 @@ class ViTEMA(EMA):
 
 
 @ViTs.register
+def vit_t16(**kwargs) -> ViT:
+    return ViT.construct(192, 12, 3, **kwargs)
+
+
+@ViTs.register
 def vit_b16(**kwargs) -> ViT:
-    return ViT.construct(768, 12, 12, 16, droppath_rate=0.1, **kwargs)
+    return ViT.construct(768, 12, 12, 16, **kwargs)

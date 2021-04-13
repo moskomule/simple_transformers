@@ -1,4 +1,5 @@
 import chika
+import homura
 import torch
 from homura import lr_scheduler, reporters
 from homura.modules import SmoothedCrossEntropy
@@ -58,6 +59,9 @@ class Config:
 @chika.main(cfg_cls=Config)
 @distributed_ready_main
 def main(cfg: Config):
+    if homura.is_master():
+        import rich
+        rich.print(cfg)
     vs = DATASET_REGISTRY("imagenet")
     aa = vs.default_train_da.copy() + [AutoAugment()]
     train_loader, test_loader = vs(batch_size=cfg.data.batch_size,
