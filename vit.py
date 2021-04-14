@@ -79,6 +79,7 @@ def main(cfg: Config):
     test_da = vs.default_test_da.copy()
     train_da[0].size = model.image_size
     test_da[0].size = model.image_size
+    test_da[1].size = model.image_size
     if cfg.data.autoaugment:
         train_da.append(AutoAugment())
     post_da = [RandomErasing()] if cfg.data.random_erasing else None
