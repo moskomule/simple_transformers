@@ -105,10 +105,11 @@ def main(cfg: Config):
                    optim_cfg=cfg.optim,
                    debug=cfg.debug
                    ) as trainer:
-        for _ in trainer.epoch_range(cfg.optim.epochs):
+        for ep in trainer.epoch_range(cfg.optim.epochs):
             trainer.train(train_loader)
             trainer.test(test_loader)
             trainer.scheduler.step()
+            trainer.save(f"outputs/{cfg.model.name}", f"{ep}")
 
         print(f"Max Test Accuracy={max(trainer.reporter.history('accuracy/test')):.3f}")
 
