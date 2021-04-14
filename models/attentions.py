@@ -38,8 +38,10 @@ def dotproduct_self_attention(query: torch.Tensor,
         query: tensor of shape BHKN
         key: tensor of shape BHKM
         value: tensor of shape BHVN
-        mask:
-        dropout:
+        mask: optional mask
+        dropout: optional dropout function
+        pre_talk: optional tensor for talking attention
+        post_talk: optional tensor for talking attention
 
     Returns: results
 

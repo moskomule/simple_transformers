@@ -62,6 +62,9 @@ class ViT(TransformerBase):
         patch_size = (patch_size, patch_size) if isinstance(patch_size, int) else patch_size
         num_patches = math.prod(image_size) // math.prod(patch_size)
 
+        self.image_size = image_size
+        self.patch_size = patch_size
+
         self.patch_emb = PatchEmbed(patch_size, emb_dim, in_channels)
         self.pos_emb = nn.Parameter(torch.zeros(1, num_patches + 1, emb_dim))
         self.cls_token = nn.Parameter(torch.zeros(1, 1, emb_dim))
@@ -131,6 +134,11 @@ def vit_t16(**kwargs) -> ViT:
 
 
 @ViTs.register
+def vit_t16_384(**kwargs) -> ViT:
+    return ViT.construct(192, 12, 3, 16, image_size=384, **kwargs)
+
+
+@ViTs.register
 def vit_b16(**kwargs) -> ViT:
     return ViT.construct(768, 12, 12, 16, **kwargs)
 
@@ -151,6 +159,7 @@ def vit_l32(**kwargs) -> ViT:
 
 
 class CaiTSequential(nn.Sequential):
+    # a helper module for CaiT to use gradient checkpointing
     def forward(self,
                 input: torch.Tensor,
                 cls_token: torch.Tensor
@@ -164,6 +173,8 @@ class CaiTSequential(nn.Sequential):
 
 
 class CaiT(TransformerBase):
+    """ CaiT from Touvron+2021 Going deeper with Image Transformers. https://github.com/facebookresearch/deit
+    """
 
     def __init__(self,
                  attention: SelfAttention,
@@ -197,6 +208,9 @@ class CaiT(TransformerBase):
         image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
         patch_size = (patch_size, patch_size) if isinstance(patch_size, int) else patch_size
         num_patches = math.prod(image_size) // math.prod(patch_size)
+
+        self.image_size = image_size
+        self.patch_size = patch_size
 
         self.patch_emb = PatchEmbed(patch_size, emb_dim, in_channels)
         self.pos_emb = nn.Parameter(torch.zeros(1, num_patches, emb_dim))
@@ -278,11 +292,10 @@ def cait_s24_384(**kwargs):
 
 
 @ViTs.register
-def cait_s24(**kwargs):
-    return cait_s24_384(**kwargs)
-
-
-@ViTs.register
-def cait_m36(**kwargs):
+def cait_m36_384(**kwargs):
     return CaiT.construct(emb_dim=384, num_layers=36, num_cls_layers=2, num_heads=8, patch_size=16, image_size=384,
                           init_scale=1e-6, **kwargs)
+
+
+ViTs.register(cait_s24_384, name="cait_s24")
+ViTs.register(cait_m36_384, name="cait_m36")

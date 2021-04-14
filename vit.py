@@ -15,8 +15,6 @@ class ViTTraner(SupervisedTrainer):
     def __init__(self, *args, **kwargs):
         self.optim_cfg = kwargs.pop('optim_cfg')
         super().__init__(*args, **kwargs)
-        if homura.is_distributed():
-            self.model.find_unused_parameters = True
 
     def set_optimizer(self
                       ) -> None:
@@ -61,6 +59,7 @@ class Config:
 
     debug: bool = False
     amp: bool = False
+    gpu: int = None
 
     def __post_init__(self):
         self.optim.lr *= self.data.batch_size * homura.get_world_size() / 512
@@ -69,19 +68,27 @@ class Config:
 @chika.main(cfg_cls=Config)
 @distributed_ready_main
 def main(cfg: Config):
+    if cfg.gpu is not None:
+        torch.cuda.set_device(cfg.gpu)
     if homura.is_master():
         import rich
         rich.print(cfg)
     vs = DATASET_REGISTRY("imagenet")
-    train_da = vs.default_train_da.copy() + [AutoAugment()] if cfg.data.autoaugment else None
+    model = ViTs(cfg.model.name)(droppath_rate=cfg.model.droppath_rate)
+    train_da = vs.default_train_da.copy()
+    test_da = vs.default_test_da.copy()
+    train_da[0].size = model.image_size
+    test_da[0].size = model.image_size
+    if cfg.data.autoaugment:
+        train_da.append(AutoAugment())
     post_da = [RandomErasing()] if cfg.data.random_erasing else None
     train_loader, test_loader = vs(batch_size=cfg.data.batch_size,
                                    train_da=train_da,
+                                   test_da=test_da,
                                    post_norm_train_da=post_da,
                                    train_size=cfg.data.batch_size * 50 if cfg.debug else None,
                                    test_size=cfg.data.batch_size * 50 if cfg.debug else None,
                                    num_workers=8)
-    model = ViTs(cfg.model.name)(droppath_rate=cfg.model.droppath_rate)
     if cfg.model.ema:
         model = ViTEMA(model, 0.99996)
     scheduler = lr_scheduler.CosineAnnealingWithWarmup(cfg.optim.epochs, 1, 5)
@@ -95,6 +102,7 @@ def main(cfg: Config):
                    use_cuda_nonblocking=True,
                    report_accuracy_topk=5,
                    optim_cfg=cfg.optim,
+                   debug=cfg.debug
                    ) as trainer:
         for _ in trainer.epoch_range(cfg.optim.epochs):
             trainer.train(train_loader)
