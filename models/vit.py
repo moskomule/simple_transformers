@@ -106,7 +106,7 @@ class ViT(TransformerBase):
                   num_layers: int,
                   num_heads: int,
                   patch_size: int,
-                  emb_dropout_rate: float = 0,
+                  dropout_rate: float = 0,
                   attn_dropout_rate: float = 0,
                   droppath_rate: float = 0,
                   num_classes: int = 1_000,
@@ -116,9 +116,9 @@ class ViT(TransformerBase):
                   activation: str = "gelu",
                   **kwargs
                   ) -> ViT:
-        attention = SelfAttention(emb_dim, num_heads, attn_dropout_rate, emb_dropout_rate)
+        attention = SelfAttention(emb_dim, num_heads, attn_dropout_rate, dropout_rate)
         return cls(attention, num_classes, image_size, patch_size, emb_dim, num_layers,
-                   emb_dropout_rate, emb_dropout_rate, droppath_rate, in_channels=in_channels,
+                   dropout_rate, dropout_rate, droppath_rate, in_channels=in_channels,
                    norm=partial(nn.LayerNorm, eps=layernorm_eps), activation=activation)
 
 
@@ -258,7 +258,7 @@ class CaiT(TransformerBase):
                   num_cls_layers: int,
                   num_heads: int,
                   patch_size: int,
-                  emb_dropout_rate: float = 0,
+                  dropout_rate: float = 0,
                   attn_dropout_rate: float = 0,
                   droppath_rate: float = 0,
                   num_classes: int = 1_000,
@@ -268,10 +268,10 @@ class CaiT(TransformerBase):
                   activation: str = "gelu",
                   **kwargs
                   ) -> CaiT:
-        attention = SelfAttention(emb_dim, num_heads, attn_dropout_rate, emb_dropout_rate, talking_heads=True)
-        cls_attention = ClassAttention(emb_dim, num_heads, attn_dropout_rate, emb_dropout_rate)
+        attention = SelfAttention(emb_dim, num_heads, attn_dropout_rate, dropout_rate, talking_heads=True)
+        cls_attention = ClassAttention(emb_dim, num_heads, attn_dropout_rate, dropout_rate)
         return cls(attention, cls_attention, num_classes, image_size, patch_size, emb_dim, num_layers, num_cls_layers,
-                   emb_dropout_rate, emb_dropout_rate, droppath_rate, in_channels=in_channels,
+                   dropout_rate, dropout_rate, droppath_rate, in_channels=in_channels,
                    norm=partial(nn.LayerNorm, eps=layernorm_eps), activation=activation, **kwargs)
 
 

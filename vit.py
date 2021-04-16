@@ -39,7 +39,8 @@ class DataConfig:
 @chika.config
 class ModelConfig:
     name: str = chika.choices(*ViTs.choices())
-    droppath_rate: float = 0.1
+    dropout_rate: float = 0
+    droppath_rate: float = 0
     ema: bool = False
 
 
@@ -74,7 +75,7 @@ def main(cfg: Config):
         import rich
         rich.print(cfg)
     vs = DATASET_REGISTRY("imagenet")
-    model = ViTs(cfg.model.name)(droppath_rate=cfg.model.droppath_rate)
+    model = ViTs(cfg.model.name)(droppath_rate=cfg.model.droppath_rate, dropout_rate=cfg.model.dropout_rate)
     train_da = vs.default_train_da.copy()
     test_da = vs.default_test_da.copy()
     train_da[0].size = model.image_size
