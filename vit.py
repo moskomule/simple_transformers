@@ -66,7 +66,7 @@ class Config:
         self.optim.lr *= self.data.batch_size * homura.get_world_size() / 512
 
 
-@chika.main(cfg_cls=Config)
+@chika.main(cfg_cls=Config, change_job_dir=True)
 @distributed_ready_main
 def main(cfg: Config):
     if cfg.gpu is not None:
