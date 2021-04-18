@@ -1,11 +1,13 @@
-# Transformers
+# Simple Transformers
+
+Simple transformer implementations that I can understand.
 
 ## Requirements
 
 ```commandline
 conda create -n transformer python=3.9
 conda activate transformer
-conda install -c pytorch -c conda-forge pytorch torchvision cudatoolkit
+conda install -c pytorch -c conda-forge pytorch torchvision cudatoolkit=11.1
 pip install -U homura-core chika datasets tokenizers rich # fairscale 
 ```
 
@@ -33,7 +35,10 @@ Train ImageNet classification models.
 Currently, ViT, and CaiT are implemented.
 
 ```commandline
+# single process training
 python vit.py [--amp] [--model.ema]
+# for multi-process training,
+python -m torch.distributed.launch --nproc_per_node=2 vit.py ...
 ```
 
 ## Acknowledgement
