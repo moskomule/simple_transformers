@@ -61,6 +61,7 @@ class Config:
     debug: bool = False
     amp: bool = False
     gpu: int = None
+    no_save: bool = False
 
     def __post_init__(self):
         self.optim.lr *= self.data.batch_size * homura.get_world_size() / 512
@@ -110,7 +111,8 @@ def main(cfg: Config):
             trainer.train(train_loader)
             trainer.test(test_loader)
             trainer.scheduler.step()
-            trainer.save(f"outputs/{cfg.model.name}", f"{ep}")
+            if not cfg.no_save:
+                trainer.save(f"outputs/{cfg.model.name}", f"{ep}")
 
         print(f"Max Test Accuracy={max(trainer.reporter.history('accuracy/test')):.3f}")
 

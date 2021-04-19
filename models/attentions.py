@@ -23,6 +23,26 @@ except ImportError:
 ATTENTIONS = Registry("attentions", )
 
 
+# helper functions
+def _masking(context: torch.Tensor,
+             mask: torch.Tensor
+             ) -> torch.Tensor:
+    if mask is None:
+        return context
+
+    size = context.size(-1)
+    return context.masked_fill(mask[:, :, :size, :size] == 0, float('-inf'))
+
+
+def _talking(context: torch.Tensor,
+             talk_tensor: torch.Tensor
+             ) -> torch.Tensor:
+    if talk_tensor is None:
+        return context
+
+    return einsum("bhmn,hk->bkmn", context, talk_tensor)
+
+
 @ATTENTIONS.register(name="dotprod")
 def dotproduct_self_attention(query: torch.Tensor,
                               key: torch.Tensor,
@@ -49,14 +69,10 @@ def dotproduct_self_attention(query: torch.Tensor,
 
     # attn/\sqrt{dim_head}
     context = einsum("bhkn,bhkm->bhmn", query, key).div(math.sqrt(query.size(-2)))
-    if pre_talk is not None:
-        context = einsum("bhmn,hk->bkmn", context, pre_talk)
-    if mask is not None:
-        size = context.size(-1)
-        context = context.masked_fill(mask[:, :, :size, :size] == 0, float('-inf'))
+    context = _talking(context, pre_talk)
+    context = _masking(context, mask)
     context = context.softmax(dim=-1)
-    if post_talk is not None:
-        context = einsum("bkmn,kh->bhmn", context, post_talk)
+    context = _talking(context, post_talk)
     if dropout is not None:
         context = dropout(context)
     return einsum("bhmn,bhvm->bhvn", context, value)

@@ -8,7 +8,13 @@ Simple transformer implementations that I can understand.
 conda create -n transformer python=3.9
 conda activate transformer
 conda install -c pytorch -c conda-forge pytorch torchvision cudatoolkit=11.1
-pip install -U homura-core chika datasets tokenizers rich # fairscale 
+pip install -U homura-core chika rich
+# for NLP also install
+pip install -U datasets tokenizers
+# To use checkpointing
+pip install -U fairscale
+# To accelerate (probably only slightly), 
+pip install -U opt_einsum
 ```
 
 ## Examples

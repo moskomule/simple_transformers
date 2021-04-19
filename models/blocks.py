@@ -89,6 +89,7 @@ class ImprovedPreLNBlock(BlockBase):
 
 
 class TimmPreLNBlock(BlockBase):
+    # Transformer Block used in timm
     def __init__(self,
                  emb_dim: int,
                  attention: SelfAttention,
@@ -129,6 +130,7 @@ class TimmPreLNBlock(BlockBase):
 
 
 class LayerScaleBlock(TimmPreLNBlock):
+    # Transformer Block with Layer Scale
     def __init__(self,
                  emb_dim: int,
                  attention: SelfAttention,
