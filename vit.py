@@ -50,6 +50,7 @@ class OptimConfig:
     weight_decay: float = 0.05
     label_smoothing: float = 0.1
     epochs: int = 200
+    min_lr: float = 1e-5
 
 
 @chika.config
@@ -64,7 +65,9 @@ class Config:
     no_save: bool = False
 
     def __post_init__(self):
+        assert self.optim.lr > self.optim.min_lr
         self.optim.lr *= self.data.batch_size * homura.get_world_size() / 512
+        self.optim.min_lr *= self.data.batch_size * homura.get_world_size() / 512
 
 
 @chika.main(cfg_cls=Config, change_job_dir=True)
@@ -94,7 +97,7 @@ def main(cfg: Config):
                                    num_workers=8)
     if cfg.model.ema:
         model = ViTEMA(model, 0.99996)
-    scheduler = lr_scheduler.CosineAnnealingWithWarmup(cfg.optim.epochs, 1, 5)
+    scheduler = lr_scheduler.CosineAnnealingWithWarmup(cfg.optim.epochs, 1, 5, min_lr=cfg.optim.min_lr)
 
     with ViTTraner(model,
                    None,
