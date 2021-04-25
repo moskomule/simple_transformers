@@ -58,9 +58,9 @@ class GPTTrainer(SupervisedTrainer):
         ids, mask = data
         input, target = ids[:, :-1], ids[:, 1:]
         ignore_index = -100
-        target = target.masked_fill(mask[:, :-1] == 0, ignore_index)
+        target = target.masked_fill(mask[:, 1:] == 0, ignore_index)
         with torch.cuda.amp.autocast(self._use_amp):
-            logits = self.model(input, mask[:, :-1])
+            logits = self.model(input, mask[:, 1:])
             loss = F.cross_entropy(logits.flatten(0, -2), target.reshape(-1), ignore_index=ignore_index)
         self.reporter.add("loss", loss.detach())
         if self.is_train:

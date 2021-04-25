@@ -30,8 +30,7 @@ def _masking(context: torch.Tensor,
     if mask is None:
         return context
 
-    size = context.size(-1)
-    return context.masked_fill(mask[:, :, :size, :size] == 0, float('-inf'))
+    return context.masked_fill(mask == 0, float('-inf'))
 
 
 def _talking(context: torch.Tensor,

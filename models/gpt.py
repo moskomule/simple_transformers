@@ -55,11 +55,12 @@ class GPT(TransformerBase):
                 mask: Optional[torch.Tensor] = None
                 ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         b, t = input.size()
-        mask = self.mask if mask is None else self.mask & mask.bool()
+        _mask = self.mask[:, :, :t, :t]
+        mask = _mask if mask is None else (_mask & mask[:, None, None, :].bool())
         token_emb = self.tok_emb(input)
         pos_emb = self.pos_emb[:, :t, :]
         x = self.dropout(token_emb + pos_emb)  # BxNxC
-        x = self.blocks(x, None if mask is None else mask[:, None, None, :])
+        x = self.blocks(x, mask)
         logits = self.head(x)  # BxNxV
         return logits
 
