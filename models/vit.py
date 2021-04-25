@@ -123,6 +123,10 @@ class ViT(TransformerBase):
 
 
 class ViTEMA(EMA):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ema_model.eval()
+
     @property
     def param_groups(self):
         return self.original_model.param_groups
