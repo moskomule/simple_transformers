@@ -42,6 +42,7 @@ class ModelConfig:
     dropout_rate: float = 0
     droppath_rate: float = 0
     ema: bool = False
+    ema_rate: float = chika.bounded(0.999, 0, 1)
 
 
 @chika.config
@@ -51,6 +52,8 @@ class OptimConfig:
     label_smoothing: float = 0.1
     epochs: int = 200
     min_lr: float = 1e-5
+    warmup_epochs: int = 5
+    multiplier: int = 1
 
 
 @chika.config
@@ -96,8 +99,10 @@ def main(cfg: Config):
                                    test_size=cfg.data.batch_size * 50 if cfg.debug else None,
                                    num_workers=8)
     if cfg.model.ema:
-        model = ViTEMA(model, 0.99996)
-    scheduler = lr_scheduler.CosineAnnealingWithWarmup(cfg.optim.epochs, 1, 5, min_lr=cfg.optim.min_lr)
+        model = ViTEMA(model, cfg.model.ema_rate)
+    scheduler = lr_scheduler.CosineAnnealingWithWarmup(cfg.optim.epochs, multiplier=cfg.optim.multiplier,
+                                                       warmup_epochs=cfg.optim.warmup_epochs,
+                                                       min_lr=cfg.optim.min_lr)
 
     with ViTTraner(model,
                    None,

@@ -13,24 +13,9 @@ from torch import nn
 from .attentions import ClassAttention, SelfAttention
 from .base import TransformerBase
 from .blocks import LayerScaleBlock, TimmPreLNBlock
+from .embeddings import PatchEmbed2d
 
 ViTs = Registry("vit", nn.Module)
-
-
-class PatchEmbed(nn.Module):
-    def __init__(self,
-                 patch_size: int or tuple,
-                 emb_dim: int,
-                 in_channels: int
-                 ):
-        super().__init__()
-        self.proj = nn.Conv2d(in_channels, emb_dim, kernel_size=patch_size, stride=patch_size)
-
-    def forward(self,
-                input: torch.Tensor
-                ) -> torch.Tensor:
-        # input: BxCxHxW -> BxNxC'
-        return self.proj(input).flatten(2).transpose(1, 2)
 
 
 class ViT(TransformerBase):
@@ -65,7 +50,7 @@ class ViT(TransformerBase):
         self.image_size = image_size
         self.patch_size = patch_size
 
-        self.patch_emb = PatchEmbed(patch_size, emb_dim, in_channels)
+        self.patch_emb = PatchEmbed2d(patch_size, emb_dim, in_channels)
         self.pos_emb = nn.Parameter(torch.zeros(1, num_patches + 1, emb_dim))
         self.cls_token = nn.Parameter(torch.zeros(1, 1, emb_dim))
         self.dropout = nn.Dropout(emb_dropout_rate)
@@ -148,6 +133,11 @@ def vit_b16(**kwargs) -> ViT:
 
 
 @ViTs.register
+def vit_b16_384(**kwargs) -> ViT:
+    return ViT.construct(768, 12, 12, 16, image_size=384, **kwargs)
+
+
+@ViTs.register
 def vit_b32(**kwargs) -> ViT:
     return ViT.construct(768, 12, 12, 32, **kwargs)
 
@@ -216,7 +206,7 @@ class CaiT(TransformerBase):
         self.image_size = image_size
         self.patch_size = patch_size
 
-        self.patch_emb = PatchEmbed(patch_size, emb_dim, in_channels)
+        self.patch_emb = PatchEmbed2d(patch_size, emb_dim, in_channels)
         self.pos_emb = nn.Parameter(torch.zeros(1, num_patches, emb_dim))
         self.cls_token = nn.Parameter(torch.zeros(1, 1, emb_dim))
         self.dropout = nn.Dropout(emb_dropout_rate)
