@@ -73,14 +73,16 @@ class ViT(TransformerBase):
             if isinstance(module, nn.Linear):
                 nn.init.trunc_normal_(module.weight, std=0.02)
                 if module.bias is not None:
-                    nn.init.zeros_(module.bias)
+                    nn.init.normal_(module.bias, 1e-6)
             if isinstance(module, nn.LayerNorm):
                 nn.init.ones_(module.weight)
                 nn.init.zeros_(module.bias)
 
         nn.init.zeros_(self.fc.weight)
         nn.init.zeros_(self.fc.bias)
-        nn.init.trunc_normal_(self.patch_emb.proj.weight)
+        proj_w = self.patch_emb.proj
+        fan_in = proj_w.in_channels * math.prod(proj_w.kernel_size)
+        nn.init.trunc_normal_(proj_w, std=math.sqrt(1 / fan_in))
         nn.init.zeros_(self.patch_emb.proj.bias)
         nn.init.trunc_normal_(self.pos_emb, std=0.02)
         nn.init.trunc_normal_(self.cls_token, std=0.02)
