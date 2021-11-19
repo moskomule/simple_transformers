@@ -111,5 +111,5 @@ class SelfAttention(nn.Module):
         # BxNx3C -> BxNxHxC'
         query, key, value = self.qkv(input).view(b, n, 3, self.num_heads, -1).unbind(2)
         attention = self.attn_fn(query, key, value, mask, self.attn_dropout, self.pre_talk, self.post_talk
-                                 ).reshape(b, self.emb_dim, -1)
+                                 ).reshape(b, -1, self.emb_dim)
         return self.proj_dropout(self.proj(attention))
