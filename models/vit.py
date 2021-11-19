@@ -82,8 +82,8 @@ class ViT(TransformerBase):
         nn.init.zeros_(self.fc.bias)
         proj_w = self.patch_emb.proj
         fan_in = proj_w.in_channels * math.prod(proj_w.kernel_size)
-        nn.init.trunc_normal_(proj_w, std=math.sqrt(1 / fan_in))
-        nn.init.zeros_(self.patch_emb.proj.bias)
+        nn.init.trunc_normal_(proj_w.weight, std=math.sqrt(1 / fan_in))
+        nn.init.zeros_(proj_w.bias)
         nn.init.trunc_normal_(self.pos_emb, std=0.02)
         nn.init.trunc_normal_(self.cls_token, std=0.02)
 
