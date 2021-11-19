@@ -67,7 +67,7 @@ def dotproduct_self_attention(query: torch.Tensor,
     """
 
     # attn/\sqrt{dim_head}
-    context = einsum("bnhk,bmhk->bhmn", query, key).div(math.sqrt(query.size(-2)))
+    context = einsum("bnhk,bmhk->bhmn", query, key).div(math.sqrt(query.size(-1)))
     context = _talking(context, pre_talk)
     context = _masking(context, mask)
     context = context.softmax(dim=-1)
