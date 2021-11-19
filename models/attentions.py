@@ -20,7 +20,7 @@ except ImportError:
 
     einsum = torch.einsum
 
-ATTENTIONS = Registry("attentions", )
+ATTENTIONS = Registry("attentions")
 
 
 # helper functions
@@ -54,27 +54,27 @@ def dotproduct_self_attention(query: torch.Tensor,
     """ dot-product self-attention
 
     Args:
-        query: tensor of shape BHKN
-        key: tensor of shape BHKM
-        value: tensor of shape BHVN
+        query: tensor of shape BNHK
+        key: tensor of shape BMHK
+        value: tensor of shape BNHV
         mask: optional mask
         dropout: optional dropout function
         pre_talk: optional tensor for talking attention
         post_talk: optional tensor for talking attention
 
-    Returns: results
+    Returns: results BNHV
 
     """
 
     # attn/\sqrt{dim_head}
-    context = einsum("bhkn,bhkm->bhmn", query, key).div(math.sqrt(query.size(-2)))
+    context = einsum("bnhk,bmhk->bhmn", query, key).div(math.sqrt(query.size(-2)))
     context = _talking(context, pre_talk)
     context = _masking(context, mask)
     context = context.softmax(dim=-1)
     context = _talking(context, post_talk)
     if dropout is not None:
         context = dropout(context)
-    return einsum("bhmn,bhvm->bhvn", context, value)
+    return einsum("bhmn,bnhv->bmhv", context, value)
 
 
 class SelfAttention(nn.Module):
@@ -85,47 +85,31 @@ class SelfAttention(nn.Module):
                  proj_dropout_rate: float,
                  qkv_bias: bool = True,
                  proj_bias: bool = True,
-                 talking_heads: bool = False
+                 talking_heads: bool = False,
+                 attn_fn: Callable | str = "dotprod"
                  ):
         super().__init__()
 
         self.emb_dim = emb_dim
         self.num_heads = num_heads
-        self.key = nn.Linear(emb_dim, emb_dim, bias=qkv_bias)
-        self._query = nn.Linear(emb_dim, emb_dim, bias=qkv_bias)
-        self.value = nn.Linear(emb_dim, emb_dim, bias=qkv_bias)
+        self.qkv = nn.Linear(emb_dim, 3 * emb_dim, bias=qkv_bias)
         self.proj = nn.Linear(emb_dim, emb_dim, bias=proj_bias)
-        self.attn_dropout = nn.Dropout(attn_dropout_rate)
-        self.proj_dropout = nn.Dropout(proj_dropout_rate)
+        self.attn_dropout = nn.Identity() if attn_dropout_rate == 0 else nn.Dropout(attn_dropout_rate)
+        self.proj_dropout = nn.Identity() if proj_dropout_rate == 0 else nn.Dropout(proj_dropout_rate)
         self.pre_talk, self.post_talk = None, None
         if talking_heads:
             self.pre_talk = nn.Parameter(torch.randn(self.num_heads, self.num_heads))
             self.post_talk = nn.Parameter(torch.randn(self.num_heads, self.num_heads))
-
-    def query(self,
-              input: torch.Tensor
-              ) -> torch.Tensor:
-        b = input.size(0)
-        return self._query(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
+        self.attn_fn = ATTENTIONS(attn_fn) if isinstance(attn_fn, str) else attn_fn
 
     def forward(self,
                 input: torch.Tensor,
                 mask: Optional[torch.Tensor] = None
                 ) -> torch.Tensor:
         # input: BxNxC
-        b = input.size(0)
-        # BxNxC -> BxCxN -> BxHxC'xN
-        query = self.query(input)
-        key = self.key(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
-        value = self.value(input).transpose(-1, -2).view(b, self.num_heads, self.emb_dim // self.num_heads, -1)
-        attention = dotproduct_self_attention(query, key, value, mask, self.attn_dropout, self.pre_talk, self.post_talk)
-        attention = attention.reshape(b, self.emb_dim, -1).transpose(-1, -2)
+        b, n, c = input.size()
+        # BxNx3C -> BxNxHxC'
+        query, key, value = self.qkv(input).view(b, n, 3, self.num_heads, -1).unbind(2)
+        attention = self.attn_fn(query, key, value, mask, self.attn_dropout, self.pre_talk, self.post_talk
+                                 ).reshape(b, self.emb_dim, -1)
         return self.proj_dropout(self.proj(attention))
-
-
-class ClassAttention(SelfAttention):
-    def query(self,
-              input: torch.Tensor
-              ) -> torch.Tensor:
-        # BxC->BxHxC'x1
-        return self._query(input[:, 0]).view(input.size(0), self.num_heads, self.emb_dim // self.num_heads, 1)

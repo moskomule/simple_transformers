@@ -50,5 +50,5 @@ python -m torch.distributed.launch --nproc_per_node=2 vit.py ...
 ## Acknowledgement
 
 For this project, I learned a lot from Andrej's [minGPT](https://github.com/karpathy/mingpt),
-Ross's [timm](https://github.com/rwightman/pytorch-image-models), and
-FAIR's [ClassyVision](https://github.com/facebookresearch/ClassyVision).
+Ross's [timm](https://github.com/rwightman/pytorch-image-models), Tom's [toroidal](https://github.com/MathInf/toroidal),
+and FAIR's [ClassyVision](https://github.com/facebookresearch/ClassyVision).

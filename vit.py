@@ -2,9 +2,9 @@ import chika
 import homura
 import torch
 from homura import lr_scheduler, reporters
-from homura.modules import SmoothedCrossEntropy
 from homura.trainers import SupervisedTrainer
 from homura.vision.data import DATASET_REGISTRY
+from torch import nn
 from torchvision.transforms import AutoAugment, RandomErasing
 
 from models.vit import ViTEMA, ViTs
@@ -55,7 +55,6 @@ class OptimConfig:
     epochs: int = 200
     min_lr: float = 1e-5
     warmup_epochs: int = 5
-    multiplier: int = 1
 
 
 @chika.config
@@ -64,6 +63,7 @@ class Config:
     model: ModelConfig
     optim: OptimConfig
 
+    num_workers: int = 16
     debug: bool = False
     amp: bool = False
     gpu: int = None
@@ -100,16 +100,16 @@ def main(cfg: Config):
                                    post_norm_train_da=post_da,
                                    train_size=cfg.data.batch_size * 50 if cfg.debug else None,
                                    test_size=cfg.data.batch_size * 50 if cfg.debug else None,
-                                   num_workers=8)
+                                   num_workers=cfg.num_workers)
     if cfg.model.ema:
         model = ViTEMA(model, cfg.model.ema_rate)
-    scheduler = lr_scheduler.CosineAnnealingWithWarmup(cfg.optim.epochs, multiplier=cfg.optim.multiplier,
+    scheduler = lr_scheduler.CosineAnnealingWithWarmup(cfg.optim.epochs,
                                                        warmup_epochs=cfg.optim.warmup_epochs,
                                                        min_lr=cfg.optim.min_lr)
 
     with ViTTraner(model,
                    None,
-                   SmoothedCrossEntropy(cfg.optim.label_smoothing),
+                   nn.CrossEntropyLoss(label_smoothing=cfg.optim.label_smoothing),
                    reporters=[reporters.TensorboardReporter(".")],
                    scheduler=scheduler,
                    use_amp=cfg.amp,

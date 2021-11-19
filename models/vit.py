@@ -3,14 +3,14 @@ from __future__ import annotations
 import math
 from copy import deepcopy
 from functools import partial
-from typing import Type
+from typing import Type, Optional
 
 import torch
 from homura import Registry
 from homura.modules import EMA
 from torch import nn
 
-from .attentions import ClassAttention, SelfAttention
+from .attentions import SelfAttention
 from .base import TransformerBase
 from .blocks import LayerScaleBlock, TimmPreLNBlock
 from .embeddings import PatchEmbed2d
@@ -152,6 +152,32 @@ def vit_l16(**kwargs) -> ViT:
 @ViTs.register
 def vit_l32(**kwargs) -> ViT:
     return ViT.construct(1024, 24, 16, 32, **kwargs)
+
+
+class ClassAttention(SelfAttention):
+    def __init__(self,
+                 emb_dim: int,
+                 num_heads: int,
+                 attn_dropout_rate: float,
+                 proj_dropout_rate: float,
+                 qkv_bias: bool = True,
+                 proj_bias: bool = True):
+        super().__init__(emb_dim, num_heads, attn_dropout_rate, proj_dropout_rate, qkv_bias, proj_bias)
+        self.qkv = nn.Linear(emb_dim, 2 * emb_dim)
+        self.query = nn.Linear(emb_dim, emb_dim)
+
+    def forward(self,
+                input: torch.Tensor,
+                mask: Optional[torch.Tensor] = None
+                ) -> torch.Tensor:
+        # input: BxNxC
+        b, n, c = input.size()
+        # BxC -> Bx1xHxC'
+        query = self.query(input[:, 0]).view(b, 1, self.num_heads, -1)
+        # BxNx2C -> BxNxHxC'
+        key, value = self.qkv(input).view(b, n, 2, self.num_heads, -1).unbind(2)
+        attention = self.attn_fn(query, key, value, mask, self.attn_dropout).reshape(b, self.emb_dim, -1)
+        return self.proj_dropout(self.proj(attention))
 
 
 class CaiTSequential(nn.Sequential):

@@ -37,7 +37,7 @@ class GPT(TransformerBase):
         self.pos_emb = nn.Parameter(torch.zeros(1, max_len, emb_dim))
         self.dropout = nn.Dropout(emb_dropout_rate)
         self.head = nn.Sequential(nn.LayerNorm(emb_dim), nn.Linear(emb_dim, vocab_size, bias=False))
-        self.register_buffer("mask", torch.tril(torch.ones(max_len, max_len, dtype=torch.bool))[None, None])
+        self.register_buffer("mask", torch.tril(torch.ones(1, 1, max_len, max_len, dtype=torch.bool)))
         self.init_weights()
 
     def init_weights(self):
