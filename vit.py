@@ -9,7 +9,7 @@ from torchvision.transforms import AutoAugment, RandomErasing
 
 from models.vit import ViTEMA, ViTs
 from utils import distributed_ready_main
-from vision_utils import fast_collate, gen_mixup_collate
+from vision_utils import fast_collate, gen_mix_collate
 
 
 class ViTTraner(SupervisedTrainer):
@@ -36,6 +36,7 @@ class DataConfig:
     autoaugment: bool = False
     random_erasing: bool = False
     mixup: float = 0
+    cutmix: float = 0
 
 
 @chika.config
@@ -84,7 +85,9 @@ def main(cfg: Config):
         import rich
         rich.print(cfg)
     vs = DATASET_REGISTRY("imagenet")
-    vs.collate_fn = fast_collate if cfg.data.mixup == 0 else gen_mixup_collate(cfg.data.mixup)
+    vs.collate_fn = fast_collate if cfg.data.mixup + cfg.data.cutmix == 0 else gen_mix_collate(vs.num_classes,
+                                                                                               cfg.data.mixup,
+                                                                                               cfg.data.cutmix)
     model = ViTs(cfg.model.name)(droppath_rate=cfg.model.droppath_rate, dropout_rate=cfg.model.dropout_rate)
     train_da = vs.default_train_da.copy()
     test_da = vs.default_test_da.copy()
