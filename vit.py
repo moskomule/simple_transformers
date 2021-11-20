@@ -8,7 +8,6 @@ from torch import nn
 from torchvision.transforms import AutoAugment, RandomErasing
 
 from models.vit import ViTEMA, ViTs
-from utils import distributed_ready_main
 from vision_utils import fast_collate, gen_mix_collate
 
 
@@ -77,7 +76,7 @@ class Config:
 
 
 @chika.main(cfg_cls=Config, change_job_dir=True)
-@distributed_ready_main
+@homura.distributed_ready_main
 def main(cfg: Config):
     if cfg.gpu is not None:
         torch.cuda.set_device(cfg.gpu)
