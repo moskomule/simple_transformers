@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional, Type
 
 import torch
@@ -7,15 +9,14 @@ from torch import nn
 from .attentions import SelfAttention
 
 BLOCK = Registry("block", nn.Module)
+ACT = Registry("activation", nn.Module)
 
-
-def act_func(name: str
-             ) -> nn.Module:
-    _acts = {"relu": nn.ReLU,
-             "leaky_relu": nn.LeakyReLU,
-             "gelu": nn.GELU,
-             "silu": nn.SiLU}
-    return _acts[name]()
+ACT.register_from_dict(
+    {"relu": nn.ReLU,
+     "leaky_relu": nn.LeakyReLU,
+     "gelu": nn.GELU,
+     "silu": nn.SiLU}
+)
 
 
 class BlockBase(nn.Module):
@@ -24,14 +25,14 @@ class BlockBase(nn.Module):
                  attention: SelfAttention,
                  dropout_rate: float,
                  widen_factor: int = 4,
-                 activation: str = "gelu",
+                 activation: Type[nn.Module] = nn.GELU,
                  norm: Type[nn.LayerNorm] = nn.LayerNorm):
         super().__init__()
         self.ln1 = norm(emb_dim)
         self.ln2 = norm(emb_dim)
         self.attention = attention
         self.mlp = nn.Sequential(nn.Linear(emb_dim, widen_factor * emb_dim),
-                                 act_func(activation),
+                                 activation(),
                                  nn.Linear(widen_factor * emb_dim, emb_dim),
                                  nn.Dropout(dropout_rate))
 
@@ -96,12 +97,12 @@ class TimmPreLNBlock(BlockBase):
                  dropout_rate: float,
                  droppath_rate: float,
                  widen_factor: int,
-                 activation: str,
+                 activation: Type[nn.Module],
                  norm: Type[nn.LayerNorm]):
         super().__init__(emb_dim, attention, dropout_rate, widen_factor, activation, norm)
         # double dropout
         self.mlp = nn.Sequential(nn.Linear(emb_dim, widen_factor * emb_dim),
-                                 act_func(activation),
+                                 activation(),
                                  nn.Dropout(dropout_rate),
                                  nn.Linear(widen_factor * emb_dim, emb_dim),
                                  nn.Dropout(dropout_rate))
@@ -137,7 +138,7 @@ class LayerScaleBlock(TimmPreLNBlock):
                  dropout_rate: float,
                  droppath_rate: float,
                  widen_factor: int,
-                 activation: str,
+                 activation: Type[nn.Module],
                  norm: Type[nn.LayerNorm],
                  init_scale: float):
         super().__init__(emb_dim, attention, dropout_rate, droppath_rate, widen_factor, activation, norm)
