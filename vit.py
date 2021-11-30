@@ -5,7 +5,7 @@ from homura import lr_scheduler, reporters
 from homura.trainers import SupervisedTrainer
 from homura.vision.data import DATASET_REGISTRY
 from torch import nn
-from torchvision.transforms import AutoAugment, RandomErasing
+from torchvision.transforms import AutoAugment, RandomErasing, RandAugment, InterpolationMode
 
 from models.vit import ViTEMA, ViTs
 from vision_utils import fast_collate, gen_mix_collate
@@ -95,7 +95,9 @@ def main(cfg: Config):
     test_da[0].size = model.image_size
     test_da[1].size = model.image_size
     if cfg.data.autoaugment:
-        train_da.append(AutoAugment())
+        train_da.append(AutoAugment(interpolation=InterpolationMode.BILINEAR))
+    if cfg.data.randaugment:
+        train_da.append(RandAugment(interpolation=InterpolationMode.BILINEAR))
     post_da = [RandomErasing()] if cfg.data.random_erasing else None
     train_loader, test_loader = vs(batch_size=cfg.data.batch_size,
                                    train_da=train_da,
