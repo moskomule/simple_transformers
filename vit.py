@@ -38,6 +38,7 @@ class ViTTraner(SupervisedTrainer):
 class DataConfig:
     batch_size: int = 128
     autoaugment: bool = False
+    randaugment: bool = False
     random_erasing: bool = False
     mixup: float = 0
     cutmix: float = 0
@@ -96,7 +97,7 @@ def main(cfg: Config):
                                                                                                cfg.data.cutmix)
     vs.test_collate_fn = fast_collate
     model = ViTs(cfg.model.name)(droppath_rate=cfg.model.droppath_rate, dropout_rate=cfg.model.dropout_rate,
-                                 enable_checkpointing=cfg.checkpointing, block=None)
+                                 enable_checkpointing=cfg.checkpointing, block=cfg.model.block)
     train_da = vs.default_train_da.copy()
     test_da = vs.default_test_da.copy()
     train_da[0].size = model.image_size
