@@ -93,8 +93,8 @@ class ViT(TransformerBase):
                   layernorm_eps: float = 1e-6,
                   activation: str = "gelu",
                   mlp_widen_factor: int = 4,
-                  enable_checkpointing: bool = False,
-                  block: str = None
+                  block: str = None,
+                  enable_checkpointing: bool = False
                   ) -> ViT:
         norm = partial(nn.LayerNorm, eps=layernorm_eps)
         activation = ACT(activation)
