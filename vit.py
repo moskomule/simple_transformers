@@ -10,6 +10,11 @@ from torchvision.transforms import AutoAugment, RandomErasing, RandAugment, Inte
 from models.vit import ViTEMA, ViTs
 from vision_utils import fast_collate, gen_mix_collate
 
+try:
+    from models import experimental
+except ImportError as e:
+    print('experimental not found!')
+
 
 class ViTTraner(SupervisedTrainer):
     def __init__(self, *args, **kwargs):
