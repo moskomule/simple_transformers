@@ -45,6 +45,7 @@ class ModelConfig:
     droppath_rate: float = 0
     ema: bool = False
     ema_rate: float = chika.bounded(0.999, 0, 1)
+    block: str = None
 
 
 @chika.config
@@ -67,6 +68,7 @@ class Config:
     debug: bool = False
     amp: bool = False
     gpu: int = None
+    checkpointing: bool = False
     no_save: bool = False
 
     def __post_init__(self):
@@ -88,7 +90,8 @@ def main(cfg: Config):
                                                                                                cfg.data.mixup,
                                                                                                cfg.data.cutmix)
     vs.test_collate_fn = fast_collate
-    model = ViTs(cfg.model.name)(droppath_rate=cfg.model.droppath_rate, dropout_rate=cfg.model.dropout_rate)
+    model = ViTs(cfg.model.name)(droppath_rate=cfg.model.droppath_rate, dropout_rate=cfg.model.dropout_rate,
+                                 enable_checkpointing=cfg.checkpointing, block=None)
     train_da = vs.default_train_da.copy()
     test_da = vs.default_test_da.copy()
     train_da[0].size = model.image_size
