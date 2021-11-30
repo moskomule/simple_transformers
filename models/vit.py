@@ -12,7 +12,7 @@ from torch import nn
 
 from .attentions import SelfAttention
 from .base import TransformerBase
-from .blocks import LayerScaleBlock, TimmPreLNBlock
+from .blocks import LayerScaleBlock, TimmPreLNBlock, ACT, BLOCK
 from .embeddings import PatchEmbed2d
 
 ViTs = Registry("vit", nn.Module)
@@ -23,26 +23,17 @@ class ViT(TransformerBase):
     """
 
     def __init__(self,
-                 attention: SelfAttention,
+                 blocks: nn.Sequential,
                  num_classes: int,
                  image_size: int or tuple,
                  patch_size: int or tuple,
                  emb_dim: int,
-                 num_layers: int,
                  emb_dropout_rate: float,
-                 dropout_rate: float,
-                 droppath_rate: float,
                  in_channels: int,
                  norm: Type[nn.LayerNorm] = nn.LayerNorm,
-                 mlp_widen_factor: int = 4,
-                 activation: str = "gelu",
                  enable_checkpointing=False
                  ):
-        blocks = [TimmPreLNBlock(emb_dim, deepcopy(attention), dropout_rate=dropout_rate, droppath_rate=r,
-                                 widen_factor=mlp_widen_factor, norm=norm, activation=activation)
-                  for r in [x.item() for x in torch.linspace(0, droppath_rate, num_layers)]
-                  ]
-        super().__init__(nn.Sequential(*blocks), enable_checkpointing)
+        super().__init__(blocks, enable_checkpointing)
         image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
         patch_size = (patch_size, patch_size) if isinstance(patch_size, int) else patch_size
         num_patches = math.prod(image_size) // math.prod(patch_size)
@@ -101,12 +92,22 @@ class ViT(TransformerBase):
                   in_channels: int = 3,
                   layernorm_eps: float = 1e-6,
                   activation: str = "gelu",
-                  **kwargs
+                  mlp_widen_factor: int = 4,
+                  enable_checkpointing: bool = False,
+                  block: str = None
                   ) -> ViT:
+        norm = partial(nn.LayerNorm, eps=layernorm_eps)
+        activation = ACT(activation)
         attention = SelfAttention(emb_dim, num_heads, attn_dropout_rate, dropout_rate)
-        return cls(attention, num_classes, image_size, patch_size, emb_dim, num_layers,
-                   dropout_rate, dropout_rate, droppath_rate, in_channels=in_channels,
-                   norm=partial(nn.LayerNorm, eps=layernorm_eps), activation=activation)
+        block_kwargs = dict(dropout_rate=dropout_rate, widen_factor=mlp_widen_factor, norm=norm, activation=activation)
+        if block is None:
+            blocks = [TimmPreLNBlock(emb_dim, deepcopy(attention), droppath_rate=r, **block_kwargs)
+                      for r in [x.item() for x in torch.linspace(0, droppath_rate, num_layers)]]
+        else:
+            blocks = [BLOCK(block)(emb_dim, deepcopy(attention), **block_kwargs) for _ in range(num_layers)]
+
+        return cls(nn.Sequential(*blocks), num_classes, image_size, patch_size, emb_dim, dropout_rate, in_channels,
+                   norm, enable_checkpointing=enable_checkpointing)
 
 
 class ViTEMA(EMA):
@@ -217,6 +218,7 @@ class CaiT(TransformerBase):
                  enable_checkpointing=False,
                  init_scale: float = 1e-5
                  ):
+        activation = ACT(activation)
         blocks1 = [LayerScaleBlock(emb_dim, deepcopy(attention), dropout_rate=dropout_rate, droppath_rate=droppath_rate,
                                    widen_factor=mlp_widen_factor, norm=norm, activation=activation,
                                    init_scale=init_scale)
