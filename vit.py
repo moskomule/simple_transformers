@@ -5,7 +5,7 @@ from homura import lr_scheduler, reporters
 from homura.trainers import SupervisedTrainer
 from homura.vision.data import DATASET_REGISTRY
 from torch import nn
-from torchvision.transforms import AutoAugment, RandomErasing, RandAugment, InterpolationMode
+from torchvision.transforms import AutoAugment, RandAugment, InterpolationMode
 
 from models.vit import ViTEMA, ViTs
 from vision_utils import fast_collate, gen_mix_collate
@@ -30,18 +30,21 @@ class ViTTraner(SupervisedTrainer):
         ]
         self.optimizer = torch.optim._multi_tensor.AdamW(optim_groups,
                                                          lr=self.optim_cfg.lr,
+                                                         betas=self.optim_cfg.betas,
                                                          weight_decay=self.optim_cfg.weight_decay)
         self.logger.debug(self.optimizer)
 
 
 @chika.config
 class DataConfig:
-    batch_size: int = 128
+    batch_size: int = 4_096
     autoaugment: bool = False
-    randaugment: bool = False
-    random_erasing: bool = False
-    mixup: float = 0
-    cutmix: float = 0
+    no_randaugment: bool = False
+    mixup: float = 0.8
+    cutmix: float = 1.0
+
+    def __post_init__(self):
+        self.randaugment = not self.no_randaugment
 
 
 @chika.config
@@ -49,19 +52,23 @@ class ModelConfig:
     name: str = chika.choices(*ViTs.choices())
     dropout_rate: float = 0
     droppath_rate: float = 0
-    ema: bool = False
+    no_ema: bool = False
     ema_rate: float = chika.bounded(0.999, 0, 1)
     block: str = None
+
+    def __post_init__(self):
+        self.ema = not self.no_ema
 
 
 @chika.config
 class OptimConfig:
-    lr: float = 5e-4
-    weight_decay: float = 0.05
+    lr: float = 1e-4
+    weight_decay: float = 0.3
     label_smoothing: float = 0.1
     epochs: int = 200
     min_lr: float = 1e-5
-    warmup_epochs: int = 5
+    warmup_epochs: int = 20
+    betas: list[float] = chika.sequence(0.9, 0.95, size=2)
 
 
 @chika.config
@@ -79,8 +86,8 @@ class Config:
 
     def __post_init__(self):
         assert self.optim.lr > self.optim.min_lr
-        self.optim.lr *= self.data.batch_size * homura.get_world_size() / 512
-        self.optim.min_lr *= self.data.batch_size * homura.get_world_size() / 512
+        self.optim.lr *= self.data.batch_size * homura.get_world_size() / 4_096
+        self.optim.min_lr *= self.data.batch_size * homura.get_world_size() / 4_096
 
 
 @chika.main(cfg_cls=Config, change_job_dir=True)
@@ -107,11 +114,9 @@ def main(cfg: Config):
         train_da.append(AutoAugment(interpolation=InterpolationMode.BILINEAR))
     if cfg.data.randaugment:
         train_da.append(RandAugment(interpolation=InterpolationMode.BILINEAR))
-    post_da = [RandomErasing()] if cfg.data.random_erasing else None
     train_loader, test_loader = vs(batch_size=cfg.data.batch_size,
                                    train_da=train_da,
                                    test_da=test_da,
-                                   post_norm_train_da=post_da,
                                    train_size=cfg.data.batch_size * 50 if cfg.debug else None,
                                    test_size=cfg.data.batch_size * 50 if cfg.debug else None,
                                    num_workers=cfg.num_workers)
