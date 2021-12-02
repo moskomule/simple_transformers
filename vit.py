@@ -28,10 +28,13 @@ class ViTTraner(SupervisedTrainer):
             {"params": params_dict['decay'], "weight_decay": self.optim_cfg.weight_decay},
             {"params": params_dict['no_decay'], "weight_decay": 0}
         ]
-        self.optimizer = torch.optim._multi_tensor.AdamW(optim_groups,
-                                                         lr=self.optim_cfg.lr,
-                                                         betas=self.optim_cfg.betas,
-                                                         weight_decay=self.optim_cfg.weight_decay)
+        kwargs = dict(lr=self.optim_cfg.lr, betas=self.optim_cfg.betas, weight_decay=self.optim_cfg.weight_decay)
+        optim = torch.optim._multi_tensor.AdamW
+        if self.optim_cfg.zero:
+            from torch.distributed.optim import ZeroRedundancyOptimizer as Zero
+            self.optimizer = Zero(optim_groups, optim, **kwargs)
+        else:
+            self.optimizer = optim(optim_groups, **kwargs)
         self.logger.debug(self.optimizer)
 
 
@@ -69,6 +72,7 @@ class OptimConfig:
     min_lr: float = 1e-7
     warmup_epochs: int = 20
     betas: list[float] = chika.sequence(0.9, 0.95, size=2)
+    zero: bool = False
 
 
 @chika.config
