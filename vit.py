@@ -66,7 +66,7 @@ class OptimConfig:
     weight_decay: float = 0.3
     label_smoothing: float = 0.1
     epochs: int = 200
-    min_lr: float = 1e-5
+    min_lr: float = 1e-7
     warmup_epochs: int = 20
     betas: list[float] = chika.sequence(0.9, 0.95, size=2)
 
