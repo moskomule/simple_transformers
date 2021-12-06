@@ -31,7 +31,8 @@ class ViT(TransformerBase):
                  emb_dropout_rate: float,
                  in_channels: int,
                  norm: Type[nn.LayerNorm] = nn.LayerNorm,
-                 enable_checkpointing=False
+                 enable_checkpointing=False,
+                 init_method: str = None
                  ):
         super().__init__(blocks, enable_checkpointing)
         image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
@@ -47,7 +48,7 @@ class ViT(TransformerBase):
         self.dropout = nn.Dropout(emb_dropout_rate)
         self.norm = norm(emb_dim)
         self.fc = nn.Linear(emb_dim, num_classes)
-        self.init_weights()
+        self.init_weights(init_method)
 
     def forward(self,
                 input: torch.Tensor
@@ -59,12 +60,20 @@ class ViT(TransformerBase):
         x = self.norm(self.blocks(x))
         return self.fc(x[:, 0])
 
-    def init_weights(self):
+    def init_weights(self,
+                     method: str = None):
+        assert method in (None, 'fairseq')
         for module in self.modules():
             if isinstance(module, nn.Linear):
-                nn.init.trunc_normal_(module.weight, std=0.02)
-                if module.bias is not None:
-                    nn.init.normal_(module.bias, 1e-6)
+                if method == 'fairseq':
+                    nn.init.xavier_uniform_(module.weight)
+                    if module.bias is not None:
+                        nn.init.zeros_(module.bias)
+                else:
+                    nn.init.trunc_normal_(module.weight, std=0.02)
+                    if module.bias is not None:
+                        nn.init.normal_(module.bias, 1e-6)
+
             if isinstance(module, nn.LayerNorm):
                 nn.init.ones_(module.weight)
                 nn.init.zeros_(module.bias)
@@ -94,7 +103,8 @@ class ViT(TransformerBase):
                   activation: str = "gelu",
                   mlp_widen_factor: int = 4,
                   block: str = None,
-                  enable_checkpointing: bool = False
+                  enable_checkpointing: bool = False,
+                  init_method: str = None
                   ) -> ViT:
         norm = partial(nn.LayerNorm, eps=layernorm_eps)
         activation = ACT(activation)
@@ -107,7 +117,7 @@ class ViT(TransformerBase):
             blocks = [BLOCK(block)(emb_dim, deepcopy(attention), **block_kwargs) for _ in range(num_layers)]
 
         return cls(nn.Sequential(*blocks), num_classes, image_size, patch_size, emb_dim, dropout_rate, in_channels,
-                   norm, enable_checkpointing=enable_checkpointing)
+                   norm, enable_checkpointing=enable_checkpointing, init_method=init_method)
 
 
 class ViTEMA(EMA):

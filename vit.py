@@ -32,10 +32,21 @@ class ViTTraner(SupervisedTrainer):
         optim = torch.optim._multi_tensor.AdamW
         if self.optim_cfg.zero:
             from torch.distributed.optim import ZeroRedundancyOptimizer as Zero
-            self.optimizer = Zero(optim_groups, optim, **kwargs)
+            self.optimizer = Zero(list(optim_groups[0]['params']), optim, **kwargs)
+            self.optimizer.add_param_group(optim_groups[1])
         else:
             self.optimizer = optim(optim_groups, **kwargs)
         self.logger.debug(self.optimizer)
+
+    def state_dict(self):
+        if self.optim_cfg.zero:
+            # todo: investigate why
+            return {'model': self.accessible_model.state_dict(),
+                    'epoch': self.epoch,
+                    'use_sync_bn': self._use_sync_bn,
+                    'use_amp': self._use_amp}
+        else:
+            return super().state_dict()
 
 
 @chika.config
@@ -58,6 +69,7 @@ class ModelConfig:
     no_ema: bool = False
     ema_rate: float = chika.bounded(0.999, 0, 1)
     block: str = None
+    init_method: str = chika.choices(None, 'fairseq')
 
     def __post_init__(self):
         self.ema = not self.no_ema
