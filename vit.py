@@ -67,7 +67,7 @@ class ModelConfig:
     dropout_rate: float = 0
     droppath_rate: float = 0
     no_ema: bool = False
-    ema_rate: float = chika.bounded(0.999, 0, 1)
+    ema_rate: float = chika.bounded(0.9999, 0, 1)
     block: str = None
     init_method: str = chika.choices(None, 'fairseq')
 
