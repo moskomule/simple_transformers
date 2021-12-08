@@ -16,7 +16,7 @@ except ImportError as e:
     print('experimental not found!')
 
 
-class ViTTraner(SupervisedTrainer):
+class ViTTrainer(SupervisedTrainer):
     def __init__(self, *args, **kwargs):
         self.optim_cfg = kwargs.pop('optim_cfg')
         super().__init__(*args, **kwargs)
@@ -102,8 +102,6 @@ class Config:
 
     def __post_init__(self):
         assert self.optim.lr > self.optim.min_lr
-        self.optim.lr *= self.data.batch_size * homura.get_world_size() / 4_096
-        self.optim.min_lr *= self.data.batch_size * homura.get_world_size() / 4_096
 
 
 @chika.main(cfg_cls=Config, change_job_dir=True)
@@ -143,17 +141,17 @@ def main(cfg: Config):
                                                        warmup_epochs=cfg.optim.warmup_epochs,
                                                        min_lr=cfg.optim.min_lr)
 
-    with ViTTraner(model,
-                   None,
-                   nn.CrossEntropyLoss(label_smoothing=cfg.optim.label_smoothing),
-                   reporters=[reporters.TensorboardReporter(".")],
-                   scheduler=scheduler,
-                   use_amp=cfg.amp,
-                   use_cuda_nonblocking=True,
-                   report_accuracy_topk=5,
-                   optim_cfg=cfg.optim,
-                   debug=cfg.debug
-                   ) as trainer:
+    with ViTTrainer(model,
+                    None,
+                    nn.CrossEntropyLoss(label_smoothing=cfg.optim.label_smoothing),
+                    reporters=[reporters.TensorboardReporter(".")],
+                    scheduler=scheduler,
+                    use_amp=cfg.amp,
+                    use_cuda_nonblocking=True,
+                    report_accuracy_topk=5,
+                    optim_cfg=cfg.optim,
+                    debug=cfg.debug
+                    ) as trainer:
         for ep in trainer.epoch_range(cfg.optim.epochs):
             trainer.train(train_loader)
             trainer.test(test_loader)
