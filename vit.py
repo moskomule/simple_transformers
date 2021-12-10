@@ -105,9 +105,7 @@ class Config:
 
     def __post_init__(self):
         assert self.optim.lr > self.optim.min_lr
-        adjuster = self.data.batch_size * homura.get_world_size() / 256
-        self.optim.lr *= adjuster
-        self.optim.min_lr *= adjuster
+        # though He+21 uses loss scaling, it degenerates training in my environment
 
 
 @chika.main(cfg_cls=Config, change_job_dir=True)
