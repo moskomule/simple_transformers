@@ -1,3 +1,6 @@
+""" Training script of ViT following He+21 (https://arxiv.org/abs/2111.06377).
+"""
+
 import chika
 import homura
 import torch
@@ -102,6 +105,9 @@ class Config:
 
     def __post_init__(self):
         assert self.optim.lr > self.optim.min_lr
+        adjuster = self.data.batch_size * homura.get_world_size() / 256
+        self.optim.lr *= adjuster
+        self.optim.min_lr *= adjuster
 
 
 @chika.main(cfg_cls=Config, change_job_dir=True)

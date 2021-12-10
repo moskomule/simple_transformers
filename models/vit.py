@@ -54,8 +54,13 @@ class ViT(TransformerBase):
                 input: torch.Tensor
                 ) -> torch.Tensor:
         x = self.patch_emb(input)  # BxNxC
-        cls_token = self.cls_token.expand(x.size(0), -1, -1)
-        x = torch.cat((cls_token, x), dim=1)  # Bx(N+1)xC
+        b, n, c = x.size()
+        cls_token = self.cls_token.expand(b, -1, -1)
+        # x = torch.cat((cls_token, x), dim=1)  # Bx(N+1)xC
+        tmp = input.new_empty(b, n + 1, c)
+        tmp[:, :1].copy_(cls_token)
+        tmp[:, 1:].copy_(x)
+        x = tmp
         x = self.dropout(self.pos_emb + x)
         x = self.norm(self.blocks(x))
         return self.fc(x[:, 0])
