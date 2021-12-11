@@ -164,6 +164,9 @@ def main(cfg: Config):
                 trainer.save(f"outputs/{cfg.model.name}", f"{ep}")
 
         print(f"Max Test Accuracy={max(trainer.reporter.history('accuracy/test')):.3f}")
+        if not homura.is_master():
+            import shutil
+            shutil.rmtree(".")
 
 
 if __name__ == '__main__':
