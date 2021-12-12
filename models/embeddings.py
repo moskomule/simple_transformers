@@ -81,4 +81,4 @@ class SinusoidalPosEmbed2d(_PosEmbed2dBase):
         if use_cls_token:
             pe_token = torch.zeros([1, 1, emb_dim], dtype=torch.float)
             pos_emb = torch.cat([pe_token, pos_emb])
-        self.pos_emb = nn.Parameter(pos_emb)
+        self.register_buffer("pos_emb", pos_emb)
