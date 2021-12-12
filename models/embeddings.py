@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 
 import torch
+from homura import Registry
 from torch import nn
 
 
@@ -45,6 +46,10 @@ class _PosEmbed2dBase(nn.Module):
         return self.pos_emb + input
 
 
+POSEMB2D = Registry('pos_emb2d')
+
+
+@POSEMB2D.register(name='learnable')
 class LearnablePosEmbed2d(_PosEmbed2dBase):
     def __init__(self,
                  emb_dim: int,
@@ -55,6 +60,7 @@ class LearnablePosEmbed2d(_PosEmbed2dBase):
         nn.init.trunc_normal_(self.pos_emb, std=0.02)
 
 
+@POSEMB2D.register(name='sinusoidal')
 class SinusoidalPosEmbed2d(_PosEmbed2dBase):
     # from facebookresearch/mocov3
     def __init__(self,
