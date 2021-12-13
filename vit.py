@@ -1,5 +1,6 @@
 """ Training script of ViT following He+21 (https://arxiv.org/abs/2111.06377).
 """
+import pathlib
 
 import chika
 import homura
@@ -166,7 +167,7 @@ def main(cfg: Config):
         print(f"Max Test Accuracy={max(trainer.reporter.history('accuracy/test')):.3f}")
         if not homura.is_master():
             import shutil
-            shutil.rmtree(".")
+            shutil.rmtree(pathlib.Path(".").resolve())
 
 
 if __name__ == '__main__':
