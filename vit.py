@@ -89,7 +89,7 @@ class OptimConfig:
     warmup_epochs: int = 20
     betas: list[float] = chika.sequence(0.9, 0.95, size=2)
     zero: bool = False
-    grad_accum_steps: int = 1
+    grad_accum_steps: int = None
 
 
 @chika.config
