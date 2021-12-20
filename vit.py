@@ -109,7 +109,8 @@ class Config:
         assert self.optim.lr > self.optim.min_lr
         # though He+21 uses loss scaling, it degenerates training in my environment...
         self.optim.lr *= self.data.batch_size * homura.get_world_size() / 256
-        self.data.batch_size /= self.optim.grad_accum_steps
+        assert self.data.batch_size % self.optim.grad_accum_steps == 0
+        self.data.batch_size //= self.optim.grad_accum_steps
 
 
 @chika.main(cfg_cls=Config, change_job_dir=True)
