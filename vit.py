@@ -89,6 +89,7 @@ class OptimConfig:
     warmup_epochs: int = 20
     betas: list[float] = chika.sequence(0.9, 0.95, size=2)
     zero: bool = False
+    grad_accum_steps: int = 1
 
 
 @chika.config
@@ -106,7 +107,9 @@ class Config:
 
     def __post_init__(self):
         assert self.optim.lr > self.optim.min_lr
-        # though He+21 uses loss scaling, it degenerates training in my environment
+        # though He+21 uses loss scaling, it degenerates training in my environment...
+        self.optim.lr *= self.batch_size * homura.get_world_size() / 256
+        self.data.batch_size /= self.optim.grad_accum_steps
 
 
 @chika.main(cfg_cls=Config, change_job_dir=True)
@@ -155,7 +158,8 @@ def main(cfg: Config):
                     use_cuda_nonblocking=True,
                     report_accuracy_topk=5,
                     optim_cfg=cfg.optim,
-                    debug=cfg.debug
+                    debug=cfg.debug,
+                    grad_accum_steps=cfg.optim.grad_accum_steps
                     ) as trainer:
         for ep in trainer.epoch_range(cfg.optim.epochs):
             trainer.train(train_loader)
