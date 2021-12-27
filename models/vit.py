@@ -12,7 +12,7 @@ from torch import nn
 
 from .attentions import SelfAttention
 from .base import TransformerBase
-from .blocks import ACT, BLOCK, PreLNBlock
+from .blocks import ACT, BLOCK
 from .embeddings import PatchEmbed2d, LearnablePosEmbed2d, POSEMB2D
 
 ViTs = Registry("vit", nn.Module)
@@ -123,11 +123,9 @@ class ViT(TransformerBase):
         attention = SelfAttention(emb_dim, num_heads, attn_dropout_rate, dropout_rate)
         block_kwargs = dict(dropout_rate=dropout_rate, widen_factor=mlp_widen_factor, norm=norm, activation=activation)
         if block is None:
-            blocks = [PreLNBlock(emb_dim, deepcopy(attention), droppath_rate=r, **block_kwargs)
-                      for r in [x.item() for x in torch.linspace(0, droppath_rate, num_layers)]]
-        else:
-            blocks = [BLOCK(block)(emb_dim, deepcopy(attention), droppath_rate=droppath_rate, **block_kwargs)
-                      for _ in range(num_layers)]
+            block = "pre_ln"
+        blocks = [BLOCK(block)(emb_dim, deepcopy(attention), droppath_rate=droppath_rate, **block_kwargs)
+                  for _ in range(num_layers)]
 
         return cls(nn.Sequential(*blocks), num_classes, image_size, patch_size, emb_dim, dropout_rate, in_channels,
                    norm, pos_emb, enable_checkpointing=enable_checkpointing, init_method=init_method)
