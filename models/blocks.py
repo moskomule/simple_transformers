@@ -39,7 +39,7 @@ class BlockBase(nn.Module):
                                  nn.Dropout(dropout_rate))
         self.droppath = nn.Identity()
         if droppath_rate is not None:
-            self.droppath = StochasticDepth(droppath_rate, 'batch')
+            self.droppath = StochasticDepth(droppath_rate, 'row')
 
     def forward(self,
                 input: torch.Tensor,
